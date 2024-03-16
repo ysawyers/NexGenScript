@@ -44,13 +44,29 @@ int matchingKeyword(Token token, char *keyword, size_t length) {
     return !memcmp(token.lexeme, keyword, length);
 }
 
-// primary := STRING | CHARACTER | DECIMAL | INTEGER | "(" expression ")"
+// grouping := "(" expression ")"
+void grouping(void) {
+    Token rparen;
+
+    pushForward();
+    expression();
+
+    if ((rparen = pushForward()).type != TOK_RPAREN) {
+        fprintf(stderr, "line %d: missing closing ) for expression\n", rparen.line);
+        exit(1);
+    }
+}
+
+// primary := STRING | CHARACTER | DECIMAL | INTEGER | grouping
 void primary(void) {
+    char *endptr;
+
     if (tr.curr.type == TOK_LPAREN) {
-        pushForward();
-        expression();
+        grouping();
     } else {
-        pushInst((Inst){.type = INST_PUSH, .operand = 10});
+        endptr = tr.curr.lexeme + tr.curr.length;
+
+        pushInst((Inst){.type = INST_PUSH, .operand = strtol(tr.curr.lexeme, &endptr, 10)});
     }
 }
 
@@ -73,7 +89,7 @@ void factor(void) {
         case TOK_DIV:
             pushForward();
             unary();
-            pushInst((Inst){.type = INST_MULT});
+            pushInst((Inst){.type = INST_DIV});
             goto step;
         default:
             pushBack();
@@ -94,7 +110,7 @@ void term(void) {
         case TOK_MINUS:
             pushForward();
             factor();
-            pushInst((Inst){.type = INST_ADD});
+            pushInst((Inst){.type = INST_SUB});
             goto step;
         default:
             pushBack();
@@ -127,14 +143,12 @@ void declStmt(void) {
         // TODO: FIX THESE TOKENS IN THE LEXER
     }
 
-    ident = pushForward();
-    if (ident.type != TOK_IDENT) {
+    if ((ident = pushForward()).type != TOK_IDENT) {
         fprintf(stderr, "line %d: expected identifier", ident.line);
         exit(1);
     }
 
-    assignment = pushForward();
-    if (assignment.type != TOK_ASSIGNMENT) {
+    if ((assignment = pushForward()).type != TOK_ASSIGNMENT) {
         fprintf(stderr, "line %d: expected assignment after variable declaration", assignment.line);
         exit(1);
     }
@@ -145,21 +159,17 @@ void declStmt(void) {
 
 // stmt := declStmt;
 void stmt(void) {
-    Token stmtType;
     Token semicol;
 
-    stmtType = pushForward();
-
-    if (matchingKeyword(stmtType, "var", 3)) {
+    if (matchingKeyword(tr.curr, "var", 3)) {
         pushBack();
         declStmt();
-    } else if (stmtType.type == TOK_IDENT) {
+    } else if (tr.curr.type == TOK_IDENT) {
         fprintf(stderr, "not implemented yet.");
         exit(1);
     }
     
-    semicol = pushForward();
-    if (semicol.type != TOK_SEMICOL) {
+    if ((semicol = pushForward()).type != TOK_SEMICOL) {
         fprintf(stderr, "line %d: missing semicolon\n", semicol.line);
         exit(1);
     }
@@ -169,6 +179,7 @@ Inst* compile(int *programLength) {
     parser.programLength = programLength;
     parser.program = (Inst *)malloc(sizeof(Inst) * 4096);
 
+    pushForward();
     while (tr.curr.type != TOK_EOF) {
         stmt();
         pushForward();
