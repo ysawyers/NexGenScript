@@ -6,12 +6,11 @@
 
 static char* readFile(const char *filepath) {
     FILE *file;
-    unsigned long fileSize;
 
     file = fopen(filepath, "rb");
 
     fseek(file, 0L, SEEK_END);
-    fileSize = ftell(file);
+    size_t fileSize = ftell(file);
     rewind(file);
 
     char *buffer = (char *)malloc(fileSize + 1);
@@ -24,26 +23,25 @@ static char* readFile(const char *filepath) {
 }
 
 int main(int argc, char *argv[]) {
-    VM *vm;
-    Inst *program;
-    char *sourceFile;
-    int programLength = 0;
-
     if (argc < 2) {
         printf("missing path to .ngs file to compile\n");
         return 1;
     }
 
-    sourceFile = readFile(argv[1]);
+    char *sourceFile = readFile(argv[1]);
     scannerInitialize(sourceFile);
-    program = compile(&programLength);
+
+    int programSize = 0;
+    Inst *program = compile(&programSize);
 
     free(sourceFile);
 
-    vm = initVM(program, programLength);
+    VM *vm = initVM(program, programSize);
+    
     programDump(vm);
     executeProgram(vm);
     memoryDump(vm);
+
     freeVM(vm);
 
     return 0;

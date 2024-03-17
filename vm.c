@@ -68,17 +68,50 @@ void executeProgram(VM *vm) {
             vm->sp -= 1;
             vm->stack[vm->sp] = vm->stack[vm->sp] / vm->stack[vm->sp + 1];
             break;
+        case INST_CMP:
+            if (vm->sp < 1) {
+                fprintf(stderr, "runtime error: stack underflow\n");
+                exit(1);
+            }
+
+            vm->sp -= 1;
+            Word result = vm->stack[vm->sp] - vm->stack[vm->sp + 1];
+
+            switch (vm->program[i].operand) {
+            case CMP_EQ:
+                vm->stack[vm->sp] = result == 0;
+                break;
+            case CMP_NE:
+                vm->stack[vm->sp] = result != 0;
+                break;
+            case CMP_GE:
+                vm->stack[vm->sp] = result >= 0;
+                break;
+            case CMP_GT:
+                vm->stack[vm->sp] = result > 0;
+                break;
+            case CMP_LE:
+                vm->stack[vm->sp] = result <= 0;
+                break;
+            case CMP_LT:
+                vm->stack[vm->sp] = result < 0;
+                break;
+            default:
+                fprintf(stderr, "unexpected branch");
+                exit(1);
+            }
         }
     }
 }
 
-const char* stringifyInst(Inst_Type type) {
+const char* stringifyInst(InstType type) {
     switch (type) {
     case INST_PUSH: return "INST_PUSH";
     case INST_ADD: return "INST_ADD";
     case INST_SUB: return "INST_SUB";
     case INST_MULT: return "INST_MULT";
     case INST_DIV: return "INST_DIV";
+    case INST_CMP: return "INST_CMP";
     }
 }
 

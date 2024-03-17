@@ -120,11 +120,59 @@ void term(void) {
 // comparison := term {: (">=" | ">" | "<=" | "<") term :}
 void comparison(void) {
     term();
+
+    step:
+        switch (pushForward().type) {
+        case TOK_GE:
+            pushForward();
+            term();
+            pushInst((Inst){.type = INST_CMP, .operand = CMP_GE});
+            goto step;
+            break;
+        case TOK_LE:
+            pushForward();
+            term();
+            pushInst((Inst){.type = INST_CMP, .operand = CMP_LE});
+            goto step;
+            break;
+        case TOK_GT:
+            pushForward();
+            term();
+            pushInst((Inst){.type = INST_CMP, .operand = CMP_GT});
+            goto step;
+            break;
+        case TOK_LT:
+            pushForward();
+            term();
+            pushInst((Inst){.type = INST_CMP, .operand = CMP_LT});
+            goto step;
+            break;
+        default:
+            pushBack();
+        }
 }
 
 // equality := comparison {: ("==" | "!=") comparison :}
 void equality(void) {
     comparison();
+
+    step:
+        switch (pushForward().type) {
+        case TOK_EQ:
+            pushForward();
+            comparison();
+            pushInst((Inst){.type = INST_CMP, .operand = CMP_EQ});
+            goto step;
+            break;
+        case TOK_NE:
+            pushForward();
+            comparison();
+            pushInst((Inst){.type = INST_CMP, .operand = CMP_NE});
+            goto step;
+            break;
+        default:
+            pushBack();
+        }
 }
 
 // expression := equality;

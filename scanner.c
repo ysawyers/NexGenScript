@@ -12,13 +12,13 @@ typedef struct {
 
 Scanner scanner;
 
-void scannerInitialize(char *buffer) {
-    scanner.start = buffer;
-    scanner.current = buffer;
+void scannerInitialize(char *file) {
+    scanner.start = file;
+    scanner.current = file;
     scanner.line = 1;
 }
 
-static Token constructToken(TokenType type) {
+Token constructToken(TokenType type) {
     Token token;
 
     token.type = type;
@@ -29,11 +29,11 @@ static Token constructToken(TokenType type) {
     return token;
 }
 
-static int compareKeyword(char *keyword, unsigned long length) {
+int compareKeyword(char *keyword, unsigned long length) {
     return !memcmp(keyword, scanner.start, length);
 }
 
-static Token isSymbolOrKeyword(void) {
+Token isSymbolOrKeyword(void) {
     while (isalnum(*scanner.current)) {
         scanner.current++;
     }
@@ -45,7 +45,7 @@ static Token isSymbolOrKeyword(void) {
     return constructToken(matchedKeyword ? TOK_KEYWORD : TOK_IDENT);
 }
 
-static Token isNumber(void) {
+Token isNumber(void) {
     int isDecimal;
 
     isDecimal = 0;
@@ -85,7 +85,12 @@ Token nextToken(void) {
                 tok = constructToken(TOK_SEMICOL);
                 break;
             case '=':
-                tok = constructToken(TOK_ASSIGNMENT);
+                if (*scanner.current == '=') {
+                    tok = constructToken(TOK_EQ);
+                    scanner.current += 1;
+                } else {
+                    tok = constructToken(TOK_ASSIGNMENT);
+                }
                 break;
             case ')':
                 tok = constructToken(TOK_RPAREN);
@@ -105,6 +110,27 @@ Token nextToken(void) {
             case '*':
                 tok = constructToken(TOK_MULT);
                 break;
+            case '>':
+                if (*scanner.current == '=') {
+                    tok = constructToken(TOK_GE);
+                    scanner.current += 1;
+                } else {
+                    tok = constructToken(TOK_GT);
+                }
+                break;
+            case '<':
+                if (*scanner.current == '=') {
+                    tok = constructToken(TOK_LE);
+                    scanner.current += 1;
+                } else {
+                    tok = constructToken(TOK_LT);
+                }
+                break;
+            case '!':
+                if (*scanner.current == '=') {
+                    tok = constructToken(TOK_NE);
+                    scanner.current += 1;
+                }
             case '\n':
                 scanner.line++;
                 break;
@@ -118,6 +144,7 @@ Token nextToken(void) {
         scanner.start = scanner.current;
 
         if (tok.line != -1) {
+            printToken(tok);
             return tok;
         }
     }
@@ -125,6 +152,12 @@ Token nextToken(void) {
 
 const char* stringifyToken(Token token) {
     switch (token.type) {
+    case TOK_EQ: return "TOK_EQ";
+    case TOK_NE: return "TOK_NE";
+    case TOK_GT: return "TOK_GT";
+    case TOK_LT: return "TOK_LT";
+    case TOK_GE: return "TOK_GE";
+    case TOK_LE: return "TOK_LE";
     case TOK_SEMICOL: return "TOK_SEMICOL";
     case TOK_ASSIGNMENT: return "TOK_ASSIGNMENT";
     case TOK_INTEGER: return "TOK_INTEGER"; 

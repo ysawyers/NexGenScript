@@ -20,6 +20,12 @@ typedef enum {
     TOK_MINUS,
     TOK_MULT,
     TOK_DIV,
+    TOK_EQ,
+    TOK_NE,
+    TOK_GT,
+    TOK_GE,
+    TOK_LE,
+    TOK_LT,
 
     // SYMBOLS
     TOK_KEYWORD,
@@ -39,7 +45,7 @@ typedef struct {
 
 Token nextToken(void);
 
-void scannerInitialize(char *buffer);
+void scannerInitialize(char *file);
 
 void printToken(Token token);
 

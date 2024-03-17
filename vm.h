@@ -8,15 +8,25 @@
 typedef int64_t Word;
 
 typedef enum {
+    CMP_GT,
+    CMP_LT,
+    CMP_GE,
+    CMP_LE,
+    CMP_EQ,
+    CMP_NE,
+} Conditions;
+
+typedef enum {
     INST_PUSH,
     INST_ADD,
     INST_SUB,
     INST_MULT,
     INST_DIV,
-} Inst_Type;
+    INST_CMP,    
+} InstType;
 
 typedef struct {
-    Inst_Type type;
+    InstType type;
     Word operand;
 } Inst;
 
