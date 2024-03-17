@@ -1,9 +1,7 @@
-var a = 10;
-
-if (15 > 10) {
-    var b = 20;
-
-    if (1 > 5) {
-        var c = 30;
-    }
+if (1 > 10) {
+    var b = 10;
+} else if (2 > 30) {
+    var c = 40;
+} else {
+    var c = 50;
 }

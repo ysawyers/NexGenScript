@@ -181,8 +181,18 @@ void expression(void) {
     equality();
 }
 
-// declStmt := IDENT "=" expression
-void declStmt(void) {
+// declStmt := ("var" | "const") IDENT "=" expression
+int declStmt(void) {
+    Token declType = pushForward();
+    if (matchingKeyword(declType, "var", 3)) {
+        // TODO
+    } else if (matchingKeyword(declType, "const", 5)) {
+        // TODO
+    } else {
+        pushBack();
+        return 0;
+    }
+
     Token ident = pushForward(); 
     if (ident.type != TOK_IDENT) {
         fprintf(stderr, "line %d: expected identifier\n", ident.line);
@@ -197,10 +207,39 @@ void declStmt(void) {
 
     pushForward();
     expression();
+
+    return 1;
 }
 
-// ifStmt := "(" expression ")" "{" {: stmt :} "}"
-void ifStmt(void) {
+// programBlock := "{" {: stmt :} "}"
+void programBlock(void) {
+    Token lsquirly = pushForward();
+    if (lsquirly.type != TOK_LSQUIRLY) {
+        fprintf(stderr, "line %d: expected {\n", lsquirly.line);
+        exit(1);
+    }
+
+    Token terminator;
+
+    step:
+        switch((terminator = pushForward()).type) {
+        case TOK_RSQUIRLY:
+        case TOK_EOF:
+            break;
+        default:
+            pushBack();
+            stmt();
+            goto step;
+        }
+
+    if (terminator.type != TOK_RSQUIRLY) {
+        fprintf(stderr, "line %d: expected closing } for block statement\n", terminator.line);
+        exit(1);
+    }
+}
+
+// conditionalBlock := "(" expression ")" programBlock
+void conditionalBlock(void) {
     Token lparen = pushForward();
     if (lparen.type != TOK_LPAREN) {
         fprintf(stderr, "line %d: expected (\n", lparen.line);
@@ -220,54 +259,47 @@ void ifStmt(void) {
         exit(1);
     }
 
-    Token lsquirly = pushForward();
-    if (lsquirly.type != TOK_LSQUIRLY) {
-        fprintf(stderr, "line %d: expected {\n", rparen.line);
-        exit(1);
-    }
-
-    Token terminator = pushForward();
-    while (terminator.type != TOK_RSQUIRLY && terminator.type != TOK_EOF) {
-        stmt();
-        terminator = pushForward();
-    }
+    programBlock();
 
     cjmp->operand = *parser.programLength - jumpFrom + 1;
-
-    if (terminator.type != TOK_RSQUIRLY) {
-        fprintf(stderr, "line %d: expected closing } for block statement\n", terminator.line);
-        exit(1);
-    }
 }
 
-// stmt := declStmt | ifStmt;
-void stmt(void) {
-    Token semicol;
+// ifStmt := "if" conditionalBlock [ "else" (ifStmt | programBlock) ]
+int ifStmt(void) {
+    if (matchingKeyword(pushForward(), "if", 2)) {
+        conditionalBlock();
+        if (matchingKeyword(pushForward(), "else", 4)) {
+            if (!ifStmt()) programBlock();
+        } else {
+            pushBack();
+        }
+        return 1;
+    }
+    pushBack();
+    return 0;
+}
 
-    if (matchingKeyword(tr.curr, "var", 3)) {
-        declStmt();
-    } else if (matchingKeyword(tr.curr, "if", 2)) {
-        ifStmt();
-        return;
-    } if (tr.curr.type == TOK_IDENT) {
-        fprintf(stderr, "not implemented yet.");
-        exit(1);
+// stmt := declStmt; | ifStmt
+void stmt(void) {
+    if (declStmt()) {
+        Token semicol = pushForward();
+        if (semicol.type != TOK_SEMICOL) {
+            fprintf(stderr, "line %d: missing semicolon\n", semicol.line);
+            exit(1);
+        }
     }
-    
-    if ((semicol = pushForward()).type != TOK_SEMICOL) {
-        fprintf(stderr, "line %d: missing semicolon\n", semicol.line);
-        exit(1);
-    }
+
+    // does not require ;
+    ifStmt();
 }
 
 Inst* compile(int *programLength) {
     parser.programLength = programLength;
     parser.program = (Inst *)malloc(sizeof(Inst) * 4096);
 
-    Token terminator = pushForward();
-    while (terminator.type != TOK_EOF) {
+    while (pushForward().type != TOK_EOF) {
+        pushBack();
         stmt();
-        terminator = pushForward();
     }
 
     return parser.program;
