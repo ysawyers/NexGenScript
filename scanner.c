@@ -41,6 +41,8 @@ Token isSymbolOrKeyword(void) {
     int matchedKeyword = 0;
 
     matchedKeyword = compareKeyword("var", 3);
+    matchedKeyword = compareKeyword("if", 2);
+    matchedKeyword = compareKeyword("else", 4);
 
     return constructToken(matchedKeyword ? TOK_KEYWORD : TOK_IDENT);
 }
@@ -110,6 +112,12 @@ Token nextToken(void) {
             case '*':
                 tok = constructToken(TOK_MULT);
                 break;
+            case '{':
+                tok = constructToken(TOK_LSQUIRLY);
+                break;
+            case '}':
+                tok = constructToken(TOK_RSQUIRLY);
+                break;
             case '>':
                 if (*scanner.current == '=') {
                     tok = constructToken(TOK_GE);
@@ -152,6 +160,8 @@ Token nextToken(void) {
 
 const char* stringifyToken(Token token) {
     switch (token.type) {
+    case TOK_LSQUIRLY: return "TOK_LSQUIRLY";
+    case TOK_RSQUIRLY: return "TOK_RSQUIRLY";
     case TOK_EQ: return "TOK_EQ";
     case TOK_NE: return "TOK_NE";
     case TOK_GT: return "TOK_GT";

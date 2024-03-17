@@ -20,12 +20,12 @@ void freeVM(VM *vm) {
 }
 
 void executeProgram(VM *vm) {
-    for (int i = 0; i < vm->programLength; i++) {
-        switch (vm->program[i].type) {
+    while (vm->pc < vm->programLength) {
+        switch (vm->program[vm->pc].type) {
         case INST_PUSH:
             if (vm->sp < MEM_SIZE) {
                 vm->sp += 1;
-                vm->stack[vm->sp] = vm->program[i].operand;
+                vm->stack[vm->sp] = vm->program[vm->pc].operand;
                 break;
             }
             fprintf(stderr, "runtime error: stack overflow\n");
@@ -77,7 +77,7 @@ void executeProgram(VM *vm) {
             vm->sp -= 1;
             Word result = vm->stack[vm->sp] - vm->stack[vm->sp + 1];
 
-            switch (vm->program[i].operand) {
+            switch (vm->program[vm->pc].operand) {
             case CMP_EQ:
                 vm->stack[vm->sp] = result == 0;
                 break;
@@ -100,12 +100,33 @@ void executeProgram(VM *vm) {
                 fprintf(stderr, "unexpected branch");
                 exit(1);
             }
+            break;
+        case INST_JMP:
+            // TODO
+            break;
+        case INST_CJMP:
+            if (vm->sp < 0) {
+                fprintf(stderr, "runtime error: stack underflow\n");
+                exit(1);
+            }
+
+            if (vm->stack[vm->sp]) {
+                vm->pc += vm->program[vm->pc].operand;
+                vm->sp -= 1;
+                continue;
+            }
+            vm->sp -= 1;
+            break;
         }
+
+        vm->pc += 1;
     }
 }
 
 const char* stringifyInst(InstType type) {
     switch (type) {
+    case INST_JMP: return "INST_JMP";
+    case INST_CJMP: return "INST_CJMP";
     case INST_PUSH: return "INST_PUSH";
     case INST_ADD: return "INST_ADD";
     case INST_SUB: return "INST_SUB";
@@ -119,7 +140,7 @@ void programDump(VM *vm) {
     printf("PROGRAM:\n\n");
 
     for (int i = 0; i < vm->programLength; i++) {
-        printf("%s", stringifyInst(vm->program[i].type));
+        printf("%02X %08llX %s", vm->program[i].type, vm->program[i].operand, stringifyInst(vm->program[i].type));
 
         if (vm->program[i].operand) {
             printf(" %lld", vm->program[i].operand);

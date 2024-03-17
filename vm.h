@@ -22,7 +22,9 @@ typedef enum {
     INST_SUB,
     INST_MULT,
     INST_DIV,
-    INST_CMP,    
+    INST_CMP,
+    INST_JMP,
+    INST_CJMP,    
 } InstType;
 
 typedef struct {

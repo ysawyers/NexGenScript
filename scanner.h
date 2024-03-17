@@ -11,6 +11,8 @@ typedef enum {
     // BRACKETS
     TOK_LPAREN, 
     TOK_RPAREN,
+    TOK_LSQUIRLY,
+    TOK_RSQUIRLY,
 
     // DELIMETERS
     TOK_SEMICOL,

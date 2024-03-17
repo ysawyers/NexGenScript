@@ -33,6 +33,7 @@ typedef struct {
 Parser parser;
 
 void expression(void);
+void stmt(void);
 
 void pushInst(Inst inst) {
     parser.program[*parser.programLength] = inst;
@@ -126,25 +127,25 @@ void comparison(void) {
         case TOK_GE:
             pushForward();
             term();
-            pushInst((Inst){.type = INST_CMP, .operand = CMP_GE});
+            pushInst((Inst){.type = INST_CMP, .operand = CMP_LT});
             goto step;
             break;
         case TOK_LE:
             pushForward();
             term();
-            pushInst((Inst){.type = INST_CMP, .operand = CMP_LE});
+            pushInst((Inst){.type = INST_CMP, .operand = CMP_GT});
             goto step;
             break;
         case TOK_GT:
             pushForward();
             term();
-            pushInst((Inst){.type = INST_CMP, .operand = CMP_GT});
+            pushInst((Inst){.type = INST_CMP, .operand = CMP_LE});
             goto step;
             break;
         case TOK_LT:
             pushForward();
             term();
-            pushInst((Inst){.type = INST_CMP, .operand = CMP_LT});
+            pushInst((Inst){.type = INST_CMP, .operand = CMP_GE});
             goto step;
             break;
         default:
@@ -161,13 +162,13 @@ void equality(void) {
         case TOK_EQ:
             pushForward();
             comparison();
-            pushInst((Inst){.type = INST_CMP, .operand = CMP_EQ});
+            pushInst((Inst){.type = INST_CMP, .operand = CMP_NE});
             goto step;
             break;
         case TOK_NE:
             pushForward();
             comparison();
-            pushInst((Inst){.type = INST_CMP, .operand = CMP_NE});
+            pushInst((Inst){.type = INST_CMP, .operand = CMP_EQ});
             goto step;
             break;
         default:
@@ -180,24 +181,17 @@ void expression(void) {
     equality();
 }
 
-// declStmt := ("var" | "const") IDENT "=" expression
+// declStmt := IDENT "=" expression
 void declStmt(void) {
-    Token declType;
-    Token ident;
-    Token assignment;
-
-    declType = pushForward();
-    if (matchingKeyword(declType, "var", 3) || matchingKeyword(declType, "const", 3)) {
-        // TODO: FIX THESE TOKENS IN THE LEXER
-    }
-
-    if ((ident = pushForward()).type != TOK_IDENT) {
-        fprintf(stderr, "line %d: expected identifier", ident.line);
+    Token ident = pushForward(); 
+    if (ident.type != TOK_IDENT) {
+        fprintf(stderr, "line %d: expected identifier\n", ident.line);
         exit(1);
     }
 
-    if ((assignment = pushForward()).type != TOK_ASSIGNMENT) {
-        fprintf(stderr, "line %d: expected assignment after variable declaration", assignment.line);
+    Token assignment = pushForward();
+    if (assignment.type != TOK_ASSIGNMENT) {
+        fprintf(stderr, "line %d: expected assignment after variable declaration\n", assignment.line);
         exit(1);
     }
 
@@ -205,14 +199,57 @@ void declStmt(void) {
     expression();
 }
 
-// stmt := declStmt;
+// ifStmt := "(" expression ")" "{" {: stmt :} "}"
+void ifStmt(void) {
+    Token lparen = pushForward();
+    if (lparen.type != TOK_LPAREN) {
+        fprintf(stderr, "line %d: expected (\n", lparen.line);
+        exit(1);
+    }
+
+    pushForward();
+    expression();
+
+    pushInst((Inst){.type = INST_CJMP});
+    Inst *cjmp = &parser.program[*parser.programLength - 1];
+    int jumpFrom = *parser.programLength;
+
+    Token rparen = pushForward();
+    if (rparen.type != TOK_RPAREN) {
+        fprintf(stderr, "line %d: expected (\n", rparen.line);
+        exit(1);
+    }
+
+    Token lsquirly = pushForward();
+    if (lsquirly.type != TOK_LSQUIRLY) {
+        fprintf(stderr, "line %d: expected {\n", rparen.line);
+        exit(1);
+    }
+
+    Token terminator = pushForward();
+    while (terminator.type != TOK_RSQUIRLY && terminator.type != TOK_EOF) {
+        stmt();
+        terminator = pushForward();
+    }
+
+    cjmp->operand = *parser.programLength - jumpFrom + 1;
+
+    if (terminator.type != TOK_RSQUIRLY) {
+        fprintf(stderr, "line %d: expected closing } for block statement\n", terminator.line);
+        exit(1);
+    }
+}
+
+// stmt := declStmt | ifStmt;
 void stmt(void) {
     Token semicol;
 
     if (matchingKeyword(tr.curr, "var", 3)) {
-        pushBack();
         declStmt();
-    } else if (tr.curr.type == TOK_IDENT) {
+    } else if (matchingKeyword(tr.curr, "if", 2)) {
+        ifStmt();
+        return;
+    } if (tr.curr.type == TOK_IDENT) {
         fprintf(stderr, "not implemented yet.");
         exit(1);
     }
@@ -227,10 +264,10 @@ Inst* compile(int *programLength) {
     parser.programLength = programLength;
     parser.program = (Inst *)malloc(sizeof(Inst) * 4096);
 
-    pushForward();
-    while (tr.curr.type != TOK_EOF) {
+    Token terminator = pushForward();
+    while (terminator.type != TOK_EOF) {
         stmt();
-        pushForward();
+        terminator = pushForward();
     }
 
     return parser.program;
