@@ -2,10 +2,11 @@
 #define VM_H
 
 #include <stdlib.h>
+#include "value.h"
 
 #define MEM_SIZE 4096
 
-typedef int64_t Word;
+typedef double Word;
 
 typedef enum {
     CMP_GT,
@@ -14,7 +15,7 @@ typedef enum {
     CMP_LE,
     CMP_EQ,
     CMP_NE,
-} Conditions;
+} Condition;
 
 typedef enum {
     INST_PUSH,
@@ -41,13 +42,15 @@ typedef struct {
     int programLength;
 } VM;
 
-VM* initVM(Inst *instructions, size_t length);
-void freeVM(VM *vm);
+void initVM(Inst *instructions, size_t length);
+void freeVM(void);
 
-void executeProgram(VM *vm);
+void executeProgram(void);
 
-void programDump(VM *vm);
+void programDump(void);
 
-void memoryDump(VM *vm);
+void memoryDump(void);
+
+double encodeTaggedLiteral(void *value, ValueType type);
 
 #endif

@@ -63,7 +63,7 @@ Token isNumber(void) {
         return constructToken(TOK_ERR);
     }
 
-    return constructToken(isDecimal ? TOK_DECIMAL : TOK_INTEGER);
+    return constructToken(isDecimal ? TOK_FLOAT : TOK_INTEGER);
 }
 
 Token nextToken(void) {
@@ -152,13 +152,12 @@ Token nextToken(void) {
         scanner.start = scanner.current;
 
         if (tok.line != -1) {
-            printToken(tok);
             return tok;
         }
     }
 }
 
-const char* stringifyToken(Token token) {
+char* stringifyToken(Token token) {
     switch (token.type) {
     case TOK_LSQUIRLY: return "TOK_LSQUIRLY";
     case TOK_RSQUIRLY: return "TOK_RSQUIRLY";
@@ -171,7 +170,7 @@ const char* stringifyToken(Token token) {
     case TOK_SEMICOL: return "TOK_SEMICOL";
     case TOK_ASSIGNMENT: return "TOK_ASSIGNMENT";
     case TOK_INTEGER: return "TOK_INTEGER"; 
-    case TOK_DECIMAL: return "TOK_DECIMAL";
+    case TOK_FLOAT: return "TOK_FLOAT";
     case TOK_LPAREN: return "TOK_LPAREN";
     case TOK_RPAREN: return "TOK_RPAREN";
     case TOK_PLUS: return "TOK_PLUS";

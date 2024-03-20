@@ -1,7 +1,7 @@
-if (1 > 10) {
-    var b = 10;
-} else if (2 > 30) {
-    var c = 40;
-} else {
-    var c = 50;
+if (200 < 10) {
+    var a = 50.0 + 10.5;
+} else if (5.2 > 5.25) {
+    var b = 10.0 + 10.0;
+} else if (100 < 2) {
+    var c = 1.0 + 1.0;
 }

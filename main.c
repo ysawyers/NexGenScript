@@ -36,13 +36,12 @@ int main(int argc, char *argv[]) {
 
     free(sourceFile);
 
-    VM *vm = initVM(program, programSize);
+    initVM(program, programSize);
     
-    programDump(vm);
-    executeProgram(vm);
-    memoryDump(vm);
+    programDump();
+    executeProgram();
 
-    freeVM(vm);
+    freeVM();
 
     return 0;
 }

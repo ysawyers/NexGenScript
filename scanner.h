@@ -6,7 +6,7 @@ typedef enum {
 
     // LITERALS
     TOK_INTEGER,
-    TOK_DECIMAL,
+    TOK_FLOAT,
 
     // BRACKETS
     TOK_LPAREN, 

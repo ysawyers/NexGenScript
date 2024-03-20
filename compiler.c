@@ -60,14 +60,26 @@ void grouping(void) {
 
 // primary := STRING | CHARACTER | DECIMAL | INTEGER | grouping
 void primary(void) {
-    char *endptr;
-
     if (tr.curr.type == TOK_LPAREN) {
         grouping();
     } else {
-        endptr = tr.curr.lexeme + tr.curr.length;
+        char *endptr = tr.curr.lexeme + tr.curr.length;
 
-        pushInst((Inst){.type = INST_PUSH, .operand = strtol(tr.curr.lexeme, &endptr, 10)});
+        switch (tr.curr.type) {
+        case TOK_INTEGER: {
+            long v = strtol(tr.curr.lexeme, &endptr, 10);
+            pushInst((Inst){.type = INST_PUSH, .operand = encodeTaggedLiteral(&v, VAL_INT)});
+            break;
+        }
+        case TOK_FLOAT: {
+            double v = strtod(tr.curr.lexeme, &endptr);
+            pushInst((Inst){.type = INST_PUSH, .operand = encodeTaggedLiteral(&v, VAL_FLOAT)});
+            break;
+        } 
+        default:
+            fprintf(stderr, "line %d: expected identifier or expression", tr.curr.line);
+            exit(1);
+        }
     }
 }
 
@@ -122,30 +134,36 @@ void term(void) {
 void comparison(void) {
     term();
 
+    Condition c;
+
     step:
         switch (pushForward().type) {
         case TOK_GE:
+            c = CMP_LT;
             pushForward();
             term();
-            pushInst((Inst){.type = INST_CMP, .operand = CMP_LT});
+            pushInst((Inst){.type = INST_CMP, .operand = encodeTaggedLiteral(&c, VAL_INT)});
             goto step;
             break;
         case TOK_LE:
+            c = CMP_GT;
             pushForward();
             term();
-            pushInst((Inst){.type = INST_CMP, .operand = CMP_GT});
+            pushInst((Inst){.type = INST_CMP, .operand = encodeTaggedLiteral(&c, VAL_INT)});
             goto step;
             break;
         case TOK_GT:
+            c = CMP_LE;
             pushForward();
             term();
-            pushInst((Inst){.type = INST_CMP, .operand = CMP_LE});
+            pushInst((Inst){.type = INST_CMP, .operand = encodeTaggedLiteral(&c, VAL_INT)});
             goto step;
             break;
         case TOK_LT:
+            c = CMP_GE;
             pushForward();
             term();
-            pushInst((Inst){.type = INST_CMP, .operand = CMP_GE});
+            pushInst((Inst){.type = INST_CMP, .operand = encodeTaggedLiteral(&c, VAL_INT)});
             goto step;
             break;
         default:
@@ -157,18 +175,22 @@ void comparison(void) {
 void equality(void) {
     comparison();
 
+    Condition c;
+
     step:
         switch (pushForward().type) {
         case TOK_EQ:
+            c = CMP_NE;
             pushForward();
             comparison();
-            pushInst((Inst){.type = INST_CMP, .operand = CMP_NE});
+            pushInst((Inst){.type = INST_CMP, .operand = encodeTaggedLiteral(&c, VAL_INT)});
             goto step;
             break;
         case TOK_NE:
+            c = CMP_EQ;
             pushForward();
             comparison();
-            pushInst((Inst){.type = INST_CMP, .operand = CMP_EQ});
+            pushInst((Inst){.type = INST_CMP, .operand = encodeTaggedLiteral(&c, VAL_INT)});
             goto step;
             break;
         default:
@@ -255,13 +277,14 @@ void conditionalBlock(void) {
 
     Token rparen = pushForward();
     if (rparen.type != TOK_RPAREN) {
-        fprintf(stderr, "line %d: expected (\n", rparen.line);
+        fprintf(stderr, "line %d: expected )\n", rparen.line);
         exit(1);
     }
 
     programBlock();
 
-    cjmp->operand = *parser.programLength - jumpFrom + 1;
+    int relativeAddr = *parser.programLength - jumpFrom + 1;
+    cjmp->operand = encodeTaggedLiteral(&relativeAddr, VAL_INT);
 }
 
 // ifStmt := "if" conditionalBlock [ "else" (ifStmt | programBlock) ]
