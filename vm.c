@@ -88,7 +88,7 @@ static inline void SUB(void) {
     Box loperand = pop();
 
     if (type(loperand) == VAL_INT && type(roperand) == VAL_INT) {
-        int value = unwrapInt(loperand) + unwrapInt(roperand);
+        int value = unwrapInt(loperand) - unwrapInt(roperand);
         push(createBox(&value, VAL_INT));
     } else {
         void *lval = &loperand;
@@ -113,7 +113,7 @@ static inline void MULT(void) {
     Box loperand = pop();
 
     if (type(loperand) == VAL_INT && type(roperand) == VAL_INT) {
-        int value = unwrapInt(loperand) + unwrapInt(roperand);
+        int value = unwrapInt(loperand) * unwrapInt(roperand);
         push(createBox(&value, VAL_INT));
     } else {
         void *lval = &loperand;
@@ -138,7 +138,7 @@ static inline void DIV(void) {
     Box loperand = pop();
 
     if (type(loperand) == VAL_INT && type(roperand) == VAL_INT) {
-        int value = unwrapInt(loperand) + unwrapInt(roperand);
+        int value = unwrapInt(loperand) / unwrapInt(roperand);
         push(createBox(&value, VAL_INT));
     } else {
         void *lval = &loperand;
@@ -162,6 +162,8 @@ static inline int CJMP(int operand) {
     Box value = pop();
 
     int shouldJump = unwrapInt(value);
+
+
     if (shouldJump || vm->conditionBreaker) {
         vm->pc += operand;
         return 1;
@@ -294,7 +296,13 @@ void executeProgram(void) {
         case INST_JMP:
             break;
         case INST_CJMP:
-            if (CJMP(unwrapInt(vm->program[vm->pc].operand))) continue;
+            if (CJMP(unwrapInt(vm->program[vm->pc].operand))) {
+                continue;
+            };
+            break;
+        case INST_RESET_CB:
+            vm->conditionBreaker = 0;
+            break;
         }
         
         vm->pc += 1;
@@ -314,6 +322,7 @@ char* stringifyInst(InstType type) {
     case INST_DIV: return "INST_DIV";
     case INST_CMP: return "INST_CMP";
     case INST_NOT: return "INST_NOT";
+    case INST_RESET_CB: return "INST_RESET_CB";
     }
 }
 
@@ -334,7 +343,7 @@ void programDump(void) {
     printf("===== DISASSEMBLY =====\n\n");
 
     for (int i = 0; i < vm->programLength; i++) {
-        printf("%02X %s ", vm->program[i].type, stringifyInst(vm->program[i].type));
+        printf("PC: (0x%04X) %s ", i, stringifyInst(vm->program[i].type));
         if (vm->program[i].operand) {
             printBox(vm->program[i].operand);
         }

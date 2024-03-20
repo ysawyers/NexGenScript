@@ -1,0 +1,4 @@
+# TODO
+
+- scoped variables
+- loops

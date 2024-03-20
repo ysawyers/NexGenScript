@@ -24,7 +24,8 @@ typedef enum {
     INST_CMP,
     INST_NOT,
     INST_JMP,
-    INST_CJMP,    
+    INST_CJMP,
+    INST_RESET_CB,
 } InstType;
 
 typedef struct {

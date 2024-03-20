@@ -296,7 +296,7 @@ int ifStmt(void) {
         conditionalBlock();
         if (matchingKeyword(pushForward(), "else", 4)) {
             if (!ifStmt()) {
-                int fallback = 1;
+                int fallback = 0;
                 pushInst((Inst){.type = INST_PUSH, .operand = createBox(&fallback, VAL_INT)});
 
                 pushInst((Inst){.type = INST_CJMP});
@@ -311,6 +311,8 @@ int ifStmt(void) {
         } else {
             pushBack();
         }
+
+        pushInst((Inst){.type = INST_RESET_CB});
         return 1;
     }
     pushBack();
