@@ -73,7 +73,7 @@ Token nextToken(void) {
     if (*scanner.start == '\0') return constructToken(TOK_EOF);
     tok.line = -1;
 
-    while (1) 
+    while (1)
     {
         c = *(scanner.current++);
 

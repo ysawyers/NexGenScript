@@ -6,8 +6,6 @@
 
 #define MEM_SIZE 4096
 
-typedef double Word;
-
 typedef enum {
     CMP_GT,
     CMP_LT,
@@ -24,22 +22,26 @@ typedef enum {
     INST_MULT,
     INST_DIV,
     INST_CMP,
+    INST_NOT,
     INST_JMP,
     INST_CJMP,    
 } InstType;
 
 typedef struct {
     InstType type;
-    Word operand;
+    Box operand;
 } Inst;
 
 typedef struct {
-    Word stack[MEM_SIZE];
+    Box stack[MEM_SIZE];
     int sp;
 
     Inst *program;
     int pc;
     int programLength;
+
+    // if a conditional statement passes (CJMP returns 0) set this to 1 to force all other chained conditions to fallthrough
+    int conditionBreaker;
 } VM;
 
 void initVM(Inst *instructions, size_t length);
@@ -50,7 +52,5 @@ void executeProgram(void);
 void programDump(void);
 
 void memoryDump(void);
-
-double encodeTaggedLiteral(void *value, ValueType type);
 
 #endif

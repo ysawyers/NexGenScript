@@ -4,7 +4,7 @@
 #include "vm.h"
 #include "compiler.h"
 
-static char* readFile(const char *filepath) {
+char* readFile(const char *filepath) {
     FILE *file;
 
     file = fopen(filepath, "rb");

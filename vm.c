@@ -1,9 +1,8 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include "vm.h"
-
-// NOTE: assumes on little endian machine
 
 VM *vm;
 
@@ -12,6 +11,7 @@ void initVM(Inst *program, size_t length) {
     vm->sp = -1;
     vm->programLength = length;
     vm->program = program;
+    vm->conditionBreaker = 0;
 }
 
 void freeVM(void) {
@@ -19,145 +19,158 @@ void freeVM(void) {
     free(vm);
 }
 
-Word read(int addr) {
-    if (addr > vm->sp || addr >= MEM_SIZE || addr < 0) {
-        fprintf(stderr, "runtime error: invalid READ access\n");
+static inline void push(Box value) {
+    if (vm->sp + 1 >= MEM_SIZE) {
+        fprintf(stderr, "VM ERROR: stack overflow\n");
         exit(1);
     }
+
+    vm->sp += 1;
+    vm->stack[vm->sp] = value;
+}
+
+static inline Box pop(void) {
+    if (vm->sp < 0) {
+        fprintf(stderr, "VM ERROR: stack underflow\n");
+        exit(1);
+    }
+
+    Box value = vm->stack[vm->sp];
+    vm->sp -= 1;
+    return value;
+}
+
+static inline Box read(int addr) {
+    if (addr > vm->sp || addr >= MEM_SIZE || addr < 0) {
+        fprintf(stderr, "VM ERROR: invalid READ access at location %d\n", addr);
+        exit(1);
+    }
+
     return vm->stack[addr];
 }
 
-void write(int addr, Word value) {
+static inline void write(int addr, Box value) {
     if (addr > vm->sp || addr >= MEM_SIZE || addr < 0) {
-        fprintf(stderr, "runtime error: invalid WRITE access\n");
+        fprintf(stderr, "VM ERROR: invalid WRITE access at location %d\n", addr);
         exit(1);
     }
+
     vm->stack[addr] = value;
 }
 
-static void ADD(int lopaddr, int ropaddr) {
-    Word loperand = read(lopaddr);
-    Word roperand = read(ropaddr);
-    vm->sp -= 1;
+static inline void ADD(void) {
+    Box roperand = pop();
+    Box loperand = pop();
 
-    if (type(loperand) == VAL_INT) {
-        int32_t lval = unwrapInt(&loperand);
+    if (type(loperand) == VAL_INT && type(roperand) == VAL_INT) {
+        int value = unwrapInt(loperand) + unwrapInt(roperand);
+        push(createBox(&value, VAL_INT));
+    } else {
+        void *lval = &loperand;
+        void *rval = &roperand;
 
-        if (type(roperand) == VAL_INT) {
-            int32_t v = lval + unwrapInt(&roperand);
-            write(vm->sp, encodeTaggedLiteral(&v, VAL_INT));
-        } else if (type(roperand) == VAL_FLOAT) {
-            Word v = (Word)lval + roperand;
-            write(vm->sp, encodeTaggedLiteral(&v, VAL_FLOAT));
+        double castedValue;
+        if (type(loperand) == VAL_INT) {
+            castedValue = unwrapInt(loperand);
+            lval = &castedValue;
+        } else if (type(roperand) == VAL_INT) {
+            castedValue = unwrapInt(roperand);
+            rval = &castedValue;
         }
-    } else if (type(loperand) == VAL_FLOAT) {
-        Word lval = loperand;
 
-        if (type(roperand) == VAL_INT) {
-            Word v = lval + (Word)unwrapInt(&roperand);
-            write(vm->sp, encodeTaggedLiteral(&v, VAL_FLOAT));
-        } else if (type(roperand) == VAL_FLOAT) {
-            Word v = lval + roperand;
-            write(vm->sp, encodeTaggedLiteral(&v, VAL_FLOAT));
-        }
+        double result = *(double *)lval + *(double *)rval;
+        push(createBox(&result, VAL_FLOAT));
     }
 }
 
-static void SUB(int lopaddr, int ropaddr) {
-    Word loperand = read(lopaddr);
-    Word roperand = read(ropaddr);
-    vm->sp -= 1;
+static inline void SUB(void) {
+    Box roperand = pop();
+    Box loperand = pop();
 
-    if (type(loperand) == VAL_INT) {
-        int32_t lval = unwrapInt(&loperand);
+    if (type(loperand) == VAL_INT && type(roperand) == VAL_INT) {
+        int value = unwrapInt(loperand) + unwrapInt(roperand);
+        push(createBox(&value, VAL_INT));
+    } else {
+        void *lval = &loperand;
+        void *rval = &roperand;
 
-        if (type(roperand) == VAL_INT) {
-            int32_t v = lval - unwrapInt(&roperand);
-            write(vm->sp, encodeTaggedLiteral(&v, VAL_INT));
-        } else if (type(roperand) == VAL_FLOAT) {
-            Word v = (Word)lval - roperand;
-            write(vm->sp, encodeTaggedLiteral(&v, VAL_FLOAT));
+        double castedValue;
+        if (type(loperand) == VAL_INT) {
+            castedValue = unwrapInt(loperand);
+            lval = &castedValue;
+        } else if (type(roperand) == VAL_INT) {
+            castedValue = unwrapInt(roperand);
+            rval = &castedValue;
         }
-    } else if (type(loperand) == VAL_FLOAT) {
-        Word lval = loperand;
 
-        if (type(roperand) == VAL_INT) {
-            Word v = lval - (Word)unwrapInt(&roperand);
-            write(vm->sp, encodeTaggedLiteral(&v, VAL_FLOAT));
-        } else if (type(roperand) == VAL_FLOAT) {
-            Word v = lval - roperand;
-            write(vm->sp, encodeTaggedLiteral(&v, VAL_FLOAT));
-        }
+        double result = *(double *)lval - *(double *)rval;
+        push(createBox(&result, VAL_FLOAT));
     }
 }
 
-static void MULT(int lopaddr, int ropaddr) {
-    Word loperand = read(lopaddr);
-    Word roperand = read(ropaddr);
-    vm->sp -= 1;
+static inline void MULT(void) {
+    Box roperand = pop();
+    Box loperand = pop();
 
-    if (type(loperand) == VAL_INT) {
-        int32_t lval = unwrapInt(&loperand);
+    if (type(loperand) == VAL_INT && type(roperand) == VAL_INT) {
+        int value = unwrapInt(loperand) + unwrapInt(roperand);
+        push(createBox(&value, VAL_INT));
+    } else {
+        void *lval = &loperand;
+        void *rval = &roperand;
 
-        if (type(roperand) == VAL_INT) {
-            int32_t v = lval * unwrapInt(&roperand);
-            write(vm->sp, encodeTaggedLiteral(&v, VAL_INT));
-        } else if (type(roperand) == VAL_FLOAT) {
-            Word v = (Word)lval * roperand;
-            write(vm->sp, encodeTaggedLiteral(&v, VAL_FLOAT));
+        double castedValue;
+        if (type(loperand) == VAL_INT) {
+            castedValue = unwrapInt(loperand);
+            lval = &castedValue;
+        } else if (type(roperand) == VAL_INT) {
+            castedValue = unwrapInt(roperand);
+            rval = &castedValue;
         }
-    } else if (type(loperand) == VAL_FLOAT) {
-        Word lval = loperand;
 
-        if (type(roperand) == VAL_INT) {
-            Word v = lval * (Word)unwrapInt(&roperand);
-            write(vm->sp, encodeTaggedLiteral(&v, VAL_FLOAT));
-        } else if (type(roperand) == VAL_FLOAT) {
-            Word v = lval * roperand;
-            write(vm->sp, encodeTaggedLiteral(&v, VAL_FLOAT));
-        }
+        double result = *(double *)lval * *(double *)rval;
+        push(createBox(&result, VAL_FLOAT));
     }
 }
 
-static void DIV(int lopaddr, int ropaddr) {
-    Word loperand = read(lopaddr);
-    Word roperand = read(ropaddr);
-    vm->sp -= 1;
+static inline void DIV(void) {
+    Box roperand = pop();
+    Box loperand = pop();
 
-    if (type(loperand) == VAL_INT) {
-        int32_t lval = unwrapInt(&loperand);
+    if (type(loperand) == VAL_INT && type(roperand) == VAL_INT) {
+        int value = unwrapInt(loperand) + unwrapInt(roperand);
+        push(createBox(&value, VAL_INT));
+    } else {
+        void *lval = &loperand;
+        void *rval = &roperand;
 
-        if (type(roperand) == VAL_INT) {
-            int32_t v = lval / unwrapInt(&roperand);
-            write(vm->sp, encodeTaggedLiteral(&v, VAL_INT));
-        } else if (type(roperand) == VAL_FLOAT) {
-            Word v = (Word)lval / roperand;
-            write(vm->sp, encodeTaggedLiteral(&v, VAL_FLOAT));
+        double castedValue;
+        if (type(loperand) == VAL_INT) {
+            castedValue = unwrapInt(loperand);
+            lval = &castedValue;
+        } else if (type(roperand) == VAL_INT) {
+            castedValue = unwrapInt(roperand);
+            rval = &castedValue;
         }
-    } else if (type(loperand) == VAL_FLOAT) {
-        Word lval = loperand;
 
-        if (type(roperand) == VAL_INT) {
-            Word v = lval / (Word)unwrapInt(&roperand);
-            write(vm->sp, encodeTaggedLiteral(&v, VAL_FLOAT));
-        } else if (type(roperand) == VAL_FLOAT) {
-            Word v = lval / roperand;
-            write(vm->sp, encodeTaggedLiteral(&v, VAL_FLOAT));
-        }
+        double result = *(double *)lval / *(double *)rval;
+        push(createBox(&result, VAL_FLOAT));
     }
 }
 
-static void CJMP(int operand) {
-    Word boxedValue = read(vm->sp);
-    vm->sp -= 1;
+static inline int CJMP(int operand) {
+    Box value = pop();
 
-    int v = unwrapInt(&boxedValue);
-    if (v) {
+    int shouldJump = unwrapInt(value);
+    if (shouldJump || vm->conditionBreaker) {
         vm->pc += operand;
-    }
+        return 1;
+    };
+    vm->conditionBreaker = 1;
+    return 0;
 }
 
-static void compareInt(int operand, int remainder) {
+static inline void compareInt(int operand, int remainder) {
     int boolVal;
 
     switch (operand) {
@@ -184,10 +197,10 @@ static void compareInt(int operand, int remainder) {
         exit(1);
     }
 
-    write(vm->sp, encodeTaggedLiteral(&boolVal, VAL_INT));
+    write(vm->sp, createBox(&boolVal, VAL_INT));
 }
 
-static void compareFloat(int operand, double remainder) {
+static inline void compareFloat(int operand, double remainder) {
     int boolVal;
 
     switch (operand) {
@@ -214,20 +227,20 @@ static void compareFloat(int operand, double remainder) {
         exit(1);
     }
 
-    write(vm->sp, encodeTaggedLiteral(&boolVal, VAL_INT));
+    write(vm->sp, createBox(&boolVal, VAL_INT));
 }
 
-static void CMP(int operand) {
-    SUB(vm->sp - 1, vm->sp);
+static inline void CMP(int operand) {
+    SUB();
 
-    Word boxedValue = read(vm->sp);
+    Box value = read(vm->sp);
 
-    switch (type(boxedValue)) {
+    switch (type(value)) {
     case VAL_INT:
-        compareInt(operand, unwrapInt(&boxedValue));
+        compareInt(operand, unwrapInt(value));
         break;
     case VAL_FLOAT:
-        compareFloat(operand, boxedValue);
+        compareFloat(operand, value);
         break;
     default:
         fprintf(stderr, "weird branch");
@@ -235,40 +248,55 @@ static void CMP(int operand) {
     }
 }
 
+static inline void NOT(void) {
+    Box value = pop();
+
+    switch (type(value)) {
+    case VAL_INT: {
+        int v = !unwrapInt(value);
+        push(createBox(&v, VAL_INT));
+        break;
+    }
+    case VAL_FLOAT: {
+        double v = !value;
+        push(createBox(&v, VAL_INT));
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 void executeProgram(void) {
     while (vm->pc < vm->programLength) {
         switch (vm->program[vm->pc].type) {
         case INST_PUSH:
-            if (vm->sp < MEM_SIZE) {
-                vm->sp += 1;
-                vm->stack[vm->sp] = vm->program[vm->pc].operand;
-                break;
-            }
-            fprintf(stderr, "runtime error: stack overflow\n");
-            exit(1);
+            push(vm->program[vm->pc].operand);
+            break;
         case INST_ADD:
-            ADD(vm->sp - 1, vm->sp);
+            ADD();
             break;
         case INST_SUB:
-            SUB(vm->sp - 1, vm->sp);
+            SUB();
             break;
         case INST_MULT:
-            MULT(vm->sp - 1, vm->sp);
+            MULT();
             break;
         case INST_DIV:
-            DIV(vm->sp - 1, vm->sp);
+            DIV();
+            break;
+        case INST_NOT:
+            NOT();
             break;
         case INST_CMP:
-            CMP(unwrapInt(&(vm->program[vm->pc].operand)));
+            CMP(unwrapInt(vm->program[vm->pc].operand));
             break;
         case INST_JMP:
-            // TODO
             break;
         case INST_CJMP:
-            CJMP(unwrapInt(&(vm->program[vm->pc].operand)));
-            continue;
+            if (CJMP(unwrapInt(vm->program[vm->pc].operand))) continue;
         }
-
+        
         vm->pc += 1;
     }
 
@@ -285,31 +313,48 @@ char* stringifyInst(InstType type) {
     case INST_MULT: return "INST_MULT";
     case INST_DIV: return "INST_DIV";
     case INST_CMP: return "INST_CMP";
+    case INST_NOT: return "INST_NOT";
+    }
+}
+
+void printBox(Box box) {
+    switch (type(box)) {
+    case VAL_INT:
+        printf("%d", unwrapInt(box));
+        break;
+    case VAL_FLOAT:
+        printf("%f", box);
+        break;
+    default:
+        break;
     }
 }
 
 void programDump(void) {
-    printf("PROGRAM:\n\n");
+    printf("===== DISASSEMBLY =====\n\n");
 
     for (int i = 0; i < vm->programLength; i++) {
-        printf("%02X %s", vm->program[i].type, stringifyInst(vm->program[i].type));
-
+        printf("%02X %s ", vm->program[i].type, stringifyInst(vm->program[i].type));
         if (vm->program[i].operand) {
-            printf(" %d", unwrapInt(&vm->program[i].operand));
+            printBox(vm->program[i].operand);
         }
         printf("\n");
     }
+    printf("\n");
 }
 
 void memoryDump(void) {
-    printf("STACK:\n\n");
+    printf("===== RUNTIME STACK =====\n\n");
 
     if (vm->sp < 0) {
         printf("[EMPTY]\n");
     } else {
-        for (int i = 0; i <= vm->sp; i++) {
-            printf("%f ", vm->stack[i]);
+        printf("> ");
+        for (int i = vm->sp; i >= 0; i--) {
+            printBox(vm->stack[i]);
+            printf(" ");
         }
         printf("\n");
     }
+    printf("\n");
 }

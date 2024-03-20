@@ -68,12 +68,12 @@ void primary(void) {
         switch (tr.curr.type) {
         case TOK_INTEGER: {
             long v = strtol(tr.curr.lexeme, &endptr, 10);
-            pushInst((Inst){.type = INST_PUSH, .operand = encodeTaggedLiteral(&v, VAL_INT)});
+            pushInst((Inst){.type = INST_PUSH, .operand = createBox(&v, VAL_INT)});
             break;
         }
         case TOK_FLOAT: {
             double v = strtod(tr.curr.lexeme, &endptr);
-            pushInst((Inst){.type = INST_PUSH, .operand = encodeTaggedLiteral(&v, VAL_FLOAT)});
+            pushInst((Inst){.type = INST_PUSH, .operand = createBox(&v, VAL_FLOAT)});
             break;
         } 
         default:
@@ -139,31 +139,31 @@ void comparison(void) {
     step:
         switch (pushForward().type) {
         case TOK_GE:
-            c = CMP_LT;
-            pushForward();
-            term();
-            pushInst((Inst){.type = INST_CMP, .operand = encodeTaggedLiteral(&c, VAL_INT)});
-            goto step;
-            break;
-        case TOK_LE:
-            c = CMP_GT;
-            pushForward();
-            term();
-            pushInst((Inst){.type = INST_CMP, .operand = encodeTaggedLiteral(&c, VAL_INT)});
-            goto step;
-            break;
-        case TOK_GT:
-            c = CMP_LE;
-            pushForward();
-            term();
-            pushInst((Inst){.type = INST_CMP, .operand = encodeTaggedLiteral(&c, VAL_INT)});
-            goto step;
-            break;
-        case TOK_LT:
             c = CMP_GE;
             pushForward();
             term();
-            pushInst((Inst){.type = INST_CMP, .operand = encodeTaggedLiteral(&c, VAL_INT)});
+            pushInst((Inst){.type = INST_CMP, .operand = createBox(&c, VAL_INT)});
+            goto step;
+            break;
+        case TOK_LE:
+            c = CMP_LE;
+            pushForward();
+            term();
+            pushInst((Inst){.type = INST_CMP, .operand = createBox(&c, VAL_INT)});
+            goto step;
+            break;
+        case TOK_GT:
+            c = CMP_GT;
+            pushForward();
+            term();
+            pushInst((Inst){.type = INST_CMP, .operand = createBox(&c, VAL_INT)});
+            goto step;
+            break;
+        case TOK_LT:
+            c = CMP_LT;
+            pushForward();
+            term();
+            pushInst((Inst){.type = INST_CMP, .operand = createBox(&c, VAL_INT)});
             goto step;
             break;
         default:
@@ -180,17 +180,17 @@ void equality(void) {
     step:
         switch (pushForward().type) {
         case TOK_EQ:
-            c = CMP_NE;
-            pushForward();
-            comparison();
-            pushInst((Inst){.type = INST_CMP, .operand = encodeTaggedLiteral(&c, VAL_INT)});
-            goto step;
-            break;
-        case TOK_NE:
             c = CMP_EQ;
             pushForward();
             comparison();
-            pushInst((Inst){.type = INST_CMP, .operand = encodeTaggedLiteral(&c, VAL_INT)});
+            pushInst((Inst){.type = INST_CMP, .operand = createBox(&c, VAL_INT)});
+            goto step;
+            break;
+        case TOK_NE:
+            c = CMP_NE;
+            pushForward();
+            comparison();
+            pushInst((Inst){.type = INST_CMP, .operand = createBox(&c, VAL_INT)});
             goto step;
             break;
         default:
@@ -271,6 +271,9 @@ void conditionalBlock(void) {
     pushForward();
     expression();
 
+    // will skip condition if evaluates to FALSE
+    pushInst((Inst){.type = INST_NOT});
+
     pushInst((Inst){.type = INST_CJMP});
     Inst *cjmp = &parser.program[*parser.programLength - 1];
     int jumpFrom = *parser.programLength;
@@ -284,7 +287,7 @@ void conditionalBlock(void) {
     programBlock();
 
     int relativeAddr = *parser.programLength - jumpFrom + 1;
-    cjmp->operand = encodeTaggedLiteral(&relativeAddr, VAL_INT);
+    cjmp->operand = createBox(&relativeAddr, VAL_INT);
 }
 
 // ifStmt := "if" conditionalBlock [ "else" (ifStmt | programBlock) ]
@@ -292,7 +295,19 @@ int ifStmt(void) {
     if (matchingKeyword(pushForward(), "if", 2)) {
         conditionalBlock();
         if (matchingKeyword(pushForward(), "else", 4)) {
-            if (!ifStmt()) programBlock();
+            if (!ifStmt()) {
+                int fallback = 1;
+                pushInst((Inst){.type = INST_PUSH, .operand = createBox(&fallback, VAL_INT)});
+
+                pushInst((Inst){.type = INST_CJMP});
+                Inst *cjmp = &parser.program[*parser.programLength - 1];
+                int jumpFrom = *parser.programLength;
+
+                programBlock();
+            
+                int relativeAddr = *parser.programLength - jumpFrom + 1;
+                cjmp->operand = createBox(&relativeAddr, VAL_INT);
+            };
         } else {
             pushBack();
         }
