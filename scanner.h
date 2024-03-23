@@ -16,6 +16,7 @@ typedef enum {
 
     // DELIMETERS
     TOK_SEMICOL,
+    TOK_COMMA,
 
     // OPERATORS
     TOK_PLUS,

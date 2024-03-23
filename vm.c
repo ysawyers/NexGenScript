@@ -163,12 +163,10 @@ static inline int CJMP(int operand) {
 
     int shouldJump = unwrapInt(value);
 
-
     if (shouldJump || vm->conditionBreaker) {
         vm->pc += operand;
         return 1;
     };
-    vm->conditionBreaker = 1;
     return 0;
 }
 
@@ -269,6 +267,32 @@ static inline void NOT(void) {
     }
 }
 
+static inline void CALL(int addr) {
+    vm->callStack[vm->csp] = vm->pc + 1;
+    vm->csp += 1;
+    vm->callStack[vm->csp] = vm->sp;
+    vm->csp += 1;
+    vm->pc = addr;
+}
+
+static inline void RET(int isReturningValue) {
+    Box returnedValue;
+
+    if (isReturningValue) {
+        returnedValue = pop();
+    }
+
+    vm->csp -= 1;
+    vm->sp = vm->callStack[vm->csp];
+
+    vm->csp -= 1;
+    vm->pc = vm->callStack[vm->csp];
+    
+    if (isReturningValue) {
+        push(returnedValue);
+    }
+}
+
 void executeProgram(void) {
     while (vm->pc < vm->programLength) {
         switch (vm->program[vm->pc].type) {
@@ -293,6 +317,12 @@ void executeProgram(void) {
         case INST_CMP:
             CMP(unwrapInt(vm->program[vm->pc].operand));
             break;
+        case INST_CALL:
+            CALL(unwrapInt(vm->program[vm->pc].operand));
+            continue;
+        case INST_RET:
+            RET(unwrapInt(vm->program[vm->pc].operand));
+            continue;
         case INST_JMP:
             break;
         case INST_CJMP:
@@ -300,7 +330,10 @@ void executeProgram(void) {
                 continue;
             };
             break;
-        case INST_RESET_CB:
+        case INST_SET_CB:
+            vm->conditionBreaker = 1;
+            break;
+        case INST_UNSET_CB:
             vm->conditionBreaker = 0;
             break;
         }
@@ -313,6 +346,8 @@ void executeProgram(void) {
 
 char* stringifyInst(InstType type) {
     switch (type) {
+    case INST_CALL: return "INST_CALL";
+    case INST_RET: return "INST_RET";
     case INST_JMP: return "INST_JMP";
     case INST_CJMP: return "INST_CJMP";
     case INST_PUSH: return "INST_PUSH";
@@ -322,7 +357,8 @@ char* stringifyInst(InstType type) {
     case INST_DIV: return "INST_DIV";
     case INST_CMP: return "INST_CMP";
     case INST_NOT: return "INST_NOT";
-    case INST_RESET_CB: return "INST_RESET_CB";
+    case INST_SET_CB: return "INST_SET_CB";
+    case INST_UNSET_CB: return "INST_UNSET_CB";
     }
 }
 

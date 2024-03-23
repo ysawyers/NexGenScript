@@ -25,7 +25,10 @@ typedef enum {
     INST_NOT,
     INST_JMP,
     INST_CJMP,
-    INST_RESET_CB,
+    INST_SET_CB,
+    INST_UNSET_CB,
+    INST_CALL,
+    INST_RET,
 } InstType;
 
 typedef struct {
@@ -36,6 +39,9 @@ typedef struct {
 typedef struct {
     Box stack[MEM_SIZE];
     int sp;
+
+    int callStack[MEM_SIZE];
+    int csp;
 
     Inst *program;
     int pc;

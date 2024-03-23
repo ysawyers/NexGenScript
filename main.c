@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
     free(sourceFile);
 
     initVM(program, programSize);
-    
+
     programDump();
     executeProgram();
 

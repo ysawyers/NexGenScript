@@ -29,7 +29,8 @@ Token constructToken(TokenType type) {
     return token;
 }
 
-int compareKeyword(char *keyword, unsigned long length) {
+int compareKeyword(char *keyword, long length) {
+    if ((scanner.current - scanner.start) != length) return 0;
     return !memcmp(keyword, scanner.start, length);
 }
 
@@ -43,6 +44,7 @@ Token isSymbolOrKeyword(void) {
     matchedKeyword = compareKeyword("var", 3);
     matchedKeyword = compareKeyword("if", 2);
     matchedKeyword = compareKeyword("else", 4);
+    matchedKeyword = compareKeyword("return", 6);
 
     return constructToken(matchedKeyword ? TOK_KEYWORD : TOK_IDENT);
 }
@@ -112,6 +114,9 @@ Token nextToken(void) {
             case '*':
                 tok = constructToken(TOK_MULT);
                 break;
+            case ',':
+                tok = constructToken(TOK_COMMA);
+                break;
             case '{':
                 tok = constructToken(TOK_LSQUIRLY);
                 break;
@@ -159,6 +164,7 @@ Token nextToken(void) {
 
 char* stringifyToken(Token token) {
     switch (token.type) {
+    case TOK_COMMA: return "TOK_COMMA";
     case TOK_LSQUIRLY: return "TOK_LSQUIRLY";
     case TOK_RSQUIRLY: return "TOK_RSQUIRLY";
     case TOK_EQ: return "TOK_EQ";
