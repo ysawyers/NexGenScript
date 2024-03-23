@@ -27,12 +27,19 @@ void pushBack(void) {
 
 typedef struct {
     Token symbol;
+    Token *params;
     int ip;
 } Label;
 
 typedef struct {
+    Token *params; // something or NULL
+} Scope;
+
+typedef struct {
     Label labels[100];
-    int labelsSize;
+    int labelsLength;
+
+    Scope currentScope;
     Inst *program;
     int *programLength;
 } Parser;
@@ -58,7 +65,7 @@ int matchingTokenLexeme(Token a, Token b) {
     return !memcmp(a.lexeme, b.lexeme, a.length);
 }
 
-// primary := functionCall | STRING | CHARACTER | DECIMAL | INTEGER | "(" expression ")"
+// primary := functionCall | STRING | CHARACTER | DECIMAL | INTEGER | "(" expression ")" | IDENT
 void primary(void) {
     if (tr.curr.type == TOK_LPAREN) {
         pushForward();
@@ -86,13 +93,24 @@ void primary(void) {
         case TOK_IDENT: {
             pushBack();
             if (!functionCall()) {
-                fprintf(stderr, "have not implemented variables yet!");
-                exit(1);
+                Token ident = pushForward();
+
+                // 1. check local scope
+
+                // 2. check paramaters (only applies inside function decl)
+                for (int i = 0; parser.currentScope.params + i != NULL; i++) {
+                    if (matchingTokenLexeme(parser.currentScope.params[i], ident)) {
+                        pushInst((Inst){.type = INST_FETCH_ARG, .operand = createBox(&i, VAL_INT)});
+                        break;
+                    }
+                }
+
+                // 3. check global scope
             }
             break;
         }
         default:
-            fprintf(stderr, "line %d: expected identifier or expression", tr.curr.line);
+            fprintf(stderr, "line %d: expected identifier or expression\n", tr.curr.line);
             exit(1);
         }
     }
@@ -249,7 +267,7 @@ int declStmt(void) {
 }
 
 // programBlock := "{" {: stmt [ "return" expression; (then BREAK) ] :} "}"
-int programBlock(void) {
+void programBlock(void) {
     Token lsquirly = pushForward();
     if (lsquirly.type != TOK_LSQUIRLY) {
         fprintf(stderr, "line %d: expected {\n", lsquirly.line);
@@ -258,42 +276,23 @@ int programBlock(void) {
 
     Token terminator;
 
-    // lets external context know that this block returns a value and should preserve the top value on the stack after cleanup
-    int isReturningValue = 0;
-
     step:
         terminator = pushForward();
 
-        if (matchingKeyword(terminator, "return", 6)) {
-            pushForward();
-            expression();
-
-            Token semicol = pushForward();
-            if (semicol.type != TOK_SEMICOL) {
-                fprintf(stderr, "line %d: missing semicol\n", semicol.line);
-                exit(1);
-            }
-
-            isReturningValue = 1;
-            terminator = pushForward();
-        } else {
-            switch(terminator.type) {
-            case TOK_RSQUIRLY:
-            case TOK_EOF:
-                break;
-            default:
-                pushBack();
-                stmt();
-                goto step;
-            }
+        switch(terminator.type) {
+        case TOK_RSQUIRLY:
+        case TOK_EOF:
+            break;
+        default:
+            pushBack();
+            stmt();
+            goto step;
         }
 
     if (terminator.type != TOK_RSQUIRLY) {
         fprintf(stderr, "line %d: expected closing } for block statement\n", terminator.line);
         exit(1);
     }
-
-    return isReturningValue;
 }
 
 // conditionalBlock := "(" expression ")" programBlock
@@ -359,9 +358,20 @@ int ifStmt(void) {
     return 0;
 }
 
-// stmt := functionCall; | declStmt; | ifStmt
+int returnStmt(void) {
+    if (matchingKeyword(pushForward(), "return", 6)) {
+        pushForward();
+        expression();
+        pushInst((Inst){.type = INST_RET});
+        return 1;
+    }
+    pushBack();
+    return 0;
+}
+
+// stmt := functionCall; | declStmt; | returnStmt; | ifStmt
 void stmt(void) {
-    if (declStmt() || functionCall()) {
+    if (declStmt() || functionCall() || returnStmt()) {
         Token semicol = pushForward();
         if (semicol.type != TOK_SEMICOL) {
             fprintf(stderr, "line %d: missing semicolon\n", semicol.line);
@@ -374,30 +384,37 @@ void stmt(void) {
 // args := [ expression {: , expression :} ]
 void args(void) {
     if (pushForward().type != TOK_RPAREN) {
+        int numArgs = 1;
+
         expression();
+        pushInst((Inst){.type = INST_PUSH_ARG});
 
         while (pushForward().type == TOK_COMMA) {
             pushForward();
             expression();
+            pushInst((Inst){.type = INST_PUSH_ARG});
+
+            numArgs += 1;
         }
-        pushBack();
-    } else {
-        pushBack();
+
+        pushInst((Inst){.type = INST_PUSH, .operand = createBox(&numArgs, VAL_INT)});
+        pushInst((Inst){.type = INST_PUSH_ARG});
     }
+    pushBack();
 }
 
 // functionCall := IDENT "(" args ")"
 int functionCall(void) {
     Token ident = pushForward();
 
-    for (int i = 0; i < parser.labelsSize; i++) {
+    for (int i = 0; i < parser.labelsLength; i++) {
         if (matchingTokenLexeme(parser.labels[i].symbol, ident)) {
             Token lparen = pushForward();
             if (lparen.type != TOK_LPAREN) {
                 fprintf(stderr, "line %d: expected (\n", lparen.line);
                 exit(1);
             }
-            
+
             args();
 
             Token rparen = pushForward();
@@ -416,12 +433,18 @@ int functionCall(void) {
 }
 
 // params := [ IDENT {: , IDENT :} ]
-void params(void) {
+void params(Token **params) {
     Token param = pushForward();
     if (param.type != TOK_IDENT) {
         pushBack();
         return;
     };
+
+    int paramsLength = 6;
+    *params = (Token *)malloc(sizeof(Token) * paramsLength);
+
+    int i = 0;
+    (*params)[i++] = param;
 
     while (pushForward().type == TOK_COMMA) {
         param = pushForward();
@@ -429,6 +452,13 @@ void params(void) {
             fprintf(stderr, "line %d: expected identifier\n", param.line);
             exit(1);
         }
+
+        if (i >= paramsLength) {
+            *params = realloc(*params, paramsLength * 2);
+            paramsLength = paramsLength * 2;
+        }
+
+        (*params)[i++] = param;
     }
     pushBack();
 }
@@ -450,16 +480,18 @@ void functionDecl(void) {
         Inst *cjmp = &parser.program[*parser.programLength - 1];
         int jumpFrom = *parser.programLength;
 
-        parser.labels[parser.labelsSize] = (Label){.symbol = ident, .ip = *parser.programLength};
-        parser.labelsSize += 1;
-
         Token lparen = pushForward();
         if (lparen.type != TOK_LPAREN) {
             fprintf(stderr, "line %d: missing (\n", lparen.line);
             exit(1);
         }
 
-        params();
+        Label *label = parser.labels + parser.labelsLength;
+        *label = (Label){.symbol = ident, .ip = *parser.programLength};
+        parser.labelsLength += 1;
+
+        params(&label->params);
+        parser.currentScope.params = label->params;
 
         Token rparen = pushForward();
         if (rparen.type != TOK_RPAREN) {
@@ -467,8 +499,13 @@ void functionDecl(void) {
             exit(1);
         }
 
-        int isReturningValue = programBlock();
-        pushInst((Inst){.type = INST_RET, .operand = createBox(&isReturningValue, VAL_INT)});
+        programBlock();
+
+        free(label->params);
+        parser.currentScope.params = NULL;
+
+        // TODO: PUSH AN UNDEFINED VALUE HERE
+        pushInst((Inst){.type = INST_RET});
 
         // backpatch offset from function
         int relativeAddr = *parser.programLength - jumpFrom + 1;
@@ -490,7 +527,7 @@ void global(void) {
 Inst* compile(int *programLength) {
     parser.programLength = programLength;
     parser.program = (Inst *)malloc(sizeof(Inst) * 4096);
-    parser.labelsSize = 0;
+    parser.labelsLength = 0;
     global();
     return parser.program;
 }

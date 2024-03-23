@@ -8,6 +8,7 @@ VM *vm;
 
 void initVM(Inst *program, size_t length) {
     vm = malloc(sizeof(VM));
+    vm->csp = -1;
     vm->sp = -1;
     vm->programLength = length;
     vm->program = program;
@@ -268,29 +269,34 @@ static inline void NOT(void) {
 }
 
 static inline void CALL(int addr) {
-    vm->callStack[vm->csp] = vm->pc + 1;
+    int nextInstruction = vm->pc + 1;
+
     vm->csp += 1;
-    vm->callStack[vm->csp] = vm->sp;
+    vm->callStack[vm->csp] = createBox(&nextInstruction, VAL_INT);
     vm->csp += 1;
+    vm->callStack[vm->csp] = createBox(&vm->sp, VAL_INT);
+
     vm->pc = addr;
 }
 
-static inline void RET(int isReturningValue) {
-    Box returnedValue;
+static inline void RET(void) {
+    Box returnedValue = pop();
 
-    if (isReturningValue) {
-        returnedValue = pop();
-    }
+    vm->sp = unwrapInt(vm->callStack[vm->csp]);
+    vm->csp -= 1; 
 
+    vm->pc = unwrapInt(vm->callStack[vm->csp]);
     vm->csp -= 1;
-    vm->sp = vm->callStack[vm->csp];
 
-    vm->csp -= 1;
-    vm->pc = vm->callStack[vm->csp];
-    
-    if (isReturningValue) {
-        push(returnedValue);
-    }
+    int numberOfArgs = unwrapInt(vm->callStack[vm->csp]);
+    vm->csp -= (numberOfArgs + 1);
+
+    push(returnedValue);
+}
+
+static inline void FETCH_ARG(int idx) {
+    int basept = vm->csp - 2 - vm->callStack[vm->csp - 2];
+    push(vm->callStack[basept + idx]);
 }
 
 void executeProgram(void) {
@@ -321,9 +327,16 @@ void executeProgram(void) {
             CALL(unwrapInt(vm->program[vm->pc].operand));
             continue;
         case INST_RET:
-            RET(unwrapInt(vm->program[vm->pc].operand));
+            RET();
             continue;
         case INST_JMP:
+            break;
+        case INST_PUSH_ARG:
+            vm->csp += 1;
+            vm->callStack[vm->csp] = pop();
+            break;
+        case INST_FETCH_ARG:
+            FETCH_ARG(unwrapInt(vm->program[vm->pc].operand));
             break;
         case INST_CJMP:
             if (CJMP(unwrapInt(vm->program[vm->pc].operand))) {
@@ -342,10 +355,13 @@ void executeProgram(void) {
     }
 
     memoryDump();
+    dumpCallStack();
 }
 
 char* stringifyInst(InstType type) {
     switch (type) {
+    case INST_FETCH_ARG: return "INST_FETCH_ARG";
+    case INST_PUSH_ARG: return "INST_PUSH_ARG";
     case INST_CALL: return "INST_CALL";
     case INST_RET: return "INST_RET";
     case INST_JMP: return "INST_JMP";
@@ -397,6 +413,22 @@ void memoryDump(void) {
         printf("> ");
         for (int i = vm->sp; i >= 0; i--) {
             printBox(vm->stack[i]);
+            printf(" ");
+        }
+        printf("\n");
+    }
+    printf("\n");
+}
+
+void dumpCallStack(void) {
+    printf("===== CALL STACK =====\n\n");
+
+    if (vm->csp < 0) {
+        printf("[EMPTY]\n");
+    } else {
+        printf("> ");
+        for (int i = vm->csp; i >= 0; i--) {
+            printBox(vm->callStack[i]);
             printf(" ");
         }
         printf("\n");

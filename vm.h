@@ -17,17 +17,27 @@ typedef enum {
 
 typedef enum {
     INST_PUSH,
+    
+    // OPERATIONS
     INST_ADD,
     INST_SUB,
     INST_MULT,
     INST_DIV,
-    INST_CMP,
     INST_NOT,
+    INST_CMP,
+
+    // LOOP (IMPLEMENT WHAT THE HECK WE ALREADY HAVE A USE CASE FOR THIS!!)
     INST_JMP,
+    
+    // CONDITIONALS
     INST_CJMP,
     INST_SET_CB,
     INST_UNSET_CB,
+    
+    // FUNCTIONS
     INST_CALL,
+    INST_PUSH_ARG,
+    INST_FETCH_ARG,
     INST_RET,
 } InstType;
 
@@ -40,7 +50,7 @@ typedef struct {
     Box stack[MEM_SIZE];
     int sp;
 
-    int callStack[MEM_SIZE];
+    Box callStack[MEM_SIZE];
     int csp;
 
     Inst *program;
@@ -59,5 +69,9 @@ void executeProgram(void);
 void programDump(void);
 
 void memoryDump(void);
+
+void dumpCallStack(void);
+
+void printBox(Box box);
 
 #endif

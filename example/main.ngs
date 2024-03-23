@@ -1,5 +1,5 @@
-fun returnValue() {
-    return (100 / (50 + 20)) * 20;
+fun sum(a, b) {
+    return a + b;
 }
 
-var b = returnValue() + 100;
+sum(10, 1);

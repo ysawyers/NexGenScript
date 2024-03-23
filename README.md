@@ -33,3 +33,7 @@ if (100 > 200) {
     var a = 0;
 }
 ```
+
+# Edge Cases
+
+make sure compiler checks that return is being specified within functionDecl context
