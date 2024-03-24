@@ -5,6 +5,7 @@
 #include "value.h"
 
 #define MEM_SIZE 4096
+#define CALLSTACK_MAX_SIZE 9 * 3200
 
 typedef enum {
     CMP_GT,
@@ -50,7 +51,7 @@ typedef struct {
     Box stack[MEM_SIZE];
     int sp;
 
-    Box callStack[MEM_SIZE];
+    Box callStack[CALLSTACK_MAX_SIZE];
     int csp;
 
     Inst *program;

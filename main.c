@@ -8,7 +8,6 @@ char* readFile(const char *filepath) {
     FILE *file;
 
     file = fopen(filepath, "rb");
-
     fseek(file, 0L, SEEK_END);
     size_t fileSize = ftell(file);
     rewind(file);
