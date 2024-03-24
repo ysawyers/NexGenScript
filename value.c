@@ -10,9 +10,6 @@ Box createBox(void *value, ValueType type) {
     switch(type) {
     case VAL_FLOAT:
         return *((Box *)value);
-    case VAL_BOOL:
-        fprintf(stderr, "error: boolean not implemented yet!");
-        exit(1);
     case VAL_INT:
         if (*(int32_t *)value > INT32_MAX) return (Box)(*(int32_t *)value);
         ((uint8_t *)(&box))[6] = 0xF8 + VAL_INT;
@@ -28,10 +25,6 @@ ValueType type(Box box) {
 
     switch (((uint8_t *)(&box))[6] - 0xF8) {
     case VAL_INT: return VAL_INT;
-    case VAL_BOOL: return VAL_BOOL;
-    default:
-        fprintf(stderr, "error: type");
-        exit(1);
     }
 
     return 0;

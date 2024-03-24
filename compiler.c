@@ -307,7 +307,7 @@ void conditionalBlock(void) {
     expression();
 
     // logical NOT condition to check if a jump (skip) is necessary (will be true if condition was false)
-    pushInst((Inst){.type = INST_NOT});
+    pushInst((Inst){.type = INST_LOGICAL_NOT});
 
     pushInst((Inst){.type = INST_CJMP});
     Inst *cjmp = &parser.program[*parser.programLength - 1];
@@ -472,12 +472,8 @@ void functionDecl(void) {
             exit(1);
         }
 
-        // force program to skip over the instructions specified from function definition and will only be hit on CALL instruction
-        int skipOverDefinition = 1;
-        pushInst((Inst){.type = INST_PUSH, .operand = createBox(&skipOverDefinition, VAL_INT)});
-
-        pushInst((Inst){.type = INST_CJMP});
-        Inst *cjmp = &parser.program[*parser.programLength - 1];
+        pushInst((Inst){.type = INST_JMP});
+        Inst *jmp = &parser.program[*parser.programLength - 1];
         int jumpFrom = *parser.programLength;
 
         Token lparen = pushForward();
@@ -509,7 +505,7 @@ void functionDecl(void) {
 
         // backpatch offset from function
         int relativeAddr = *parser.programLength - jumpFrom + 1;
-        cjmp->operand = createBox(&relativeAddr, VAL_INT);
+        jmp->operand = createBox(&relativeAddr, VAL_INT);
     } else {
         pushBack();
     }

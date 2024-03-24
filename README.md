@@ -1,12 +1,8 @@
 # TODO
 
+- check for overflow > 32bit for casting
 - scoped variables
 - loops
-
-# Approaches
-
-- condition-breaking counter + backpatching jump offsets
-- NaN boxing
 
 # Future Test Cases
 
@@ -34,6 +30,15 @@ if (100 > 200) {
 }
 ```
 
-# Edge Cases
+Function calls:
 
-make sure compiler checks that return is being specified within functionDecl context
+```
+fun fib(n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+fib(30);
+```

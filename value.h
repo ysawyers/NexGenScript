@@ -6,7 +6,7 @@ typedef double Box;
 typedef enum {
     VAL_INT,
     VAL_FLOAT,
-    VAL_BOOL,
+    // undefined
 } ValueType;
 
 double createBox(void *value, ValueType type);
