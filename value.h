@@ -1,16 +1,17 @@
 #ifndef VALUE_H
 #define VALUE_H
 
-typedef double Box;
+typedef union {
+    double  float64;
+    int32_t int32;
+} Box;
 
 typedef enum {
     VAL_INT,
     VAL_FLOAT,
-    // undefined
 } ValueType;
 
-double createBox(void *value, ValueType type);
+Box createBox(void *value, ValueType type);
 ValueType type(Box box);
-int32_t unwrapInt(Box box);
 
 #endif

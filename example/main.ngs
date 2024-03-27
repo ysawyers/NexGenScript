@@ -1,15 +1,9 @@
-fun factorial(n) {
-    if (n == 0) {
-        return 1;
-    }
-    return n * factorial(n - 1);
-}
+let c = 0;
 
-fun fib(n) {
-    if (n <= 1) {
-        return n;
-    }
-    return fib(n - 1) + fib(n - 2);
-}
 
-fib(30);
+let a = 1;
+
+if 1 {
+    let a = 2;
+    c = a;
+}

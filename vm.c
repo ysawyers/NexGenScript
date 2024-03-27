@@ -4,11 +4,11 @@
 #include <math.h>
 #include "vm.h"
 
-#define STACK_PUSH(value) vm->sp += 1;               \
-                          vm->stack[vm->sp] = value; \
+#define STACK_PUSH(value) vm->sp += 1;                      \
+                          vm->operandStack[vm->sp] = value; \
 
-#define STACK_POP(value)  value = vm->stack[vm->sp]; \
-                          vm->sp -= 1;                \
+#define STACK_POP(value)  value = vm->operandStack[vm->sp]; \
+                          vm->sp -= 1;                      \
 
 #define CALLSTACK_PUSH(value) vm->csp += 1;                   \
                               vm->callStack[vm->csp] = value; \
@@ -29,47 +29,10 @@ void freeVM(void) {
     free(vm);
 }
 
-// TODO: Need to support comparison between floats
-static inline void CMP(int operand) {
-    STACK_POP(Box roperand);
-    STACK_POP(Box loperand);
-
-    if (type(roperand) == VAL_INT && type(loperand) == VAL_INT) {
-            int result;
-
-            switch(operand) {
-            case CMP_EQ:
-                result = unwrapInt(loperand) == unwrapInt(roperand);
-                STACK_PUSH(createBox(&result, VAL_INT));
-                break;
-            case CMP_NE:
-                result = unwrapInt(loperand) != unwrapInt(roperand);
-                STACK_PUSH(createBox(&result, VAL_INT));
-                break;
-            case CMP_GE:
-                result = unwrapInt(loperand) >= unwrapInt(roperand);
-                STACK_PUSH(createBox(&result, VAL_INT));
-                break;
-            case CMP_GT:
-                result = unwrapInt(loperand) > unwrapInt(roperand);
-                STACK_PUSH(createBox(&result, VAL_INT));
-                break;
-            case CMP_LE:
-                result = unwrapInt(loperand) <= unwrapInt(roperand);
-                STACK_PUSH(createBox(&result, VAL_INT));
-                break;
-            case CMP_LT:
-                result = unwrapInt(loperand) < unwrapInt(roperand);
-                STACK_PUSH(createBox(&result, VAL_INT));
-                break;
-            }
-    }
-}
-
 void executeProgram(void) {
     while (vm->pc < vm->programLength) {
         switch (vm->program[vm->pc].type) {
-        case INST_PUSH:
+        case INST_STACK_PUSH:
             STACK_PUSH(vm->program[vm->pc].operand);
             break;
         case INST_ADD: {
@@ -77,22 +40,27 @@ void executeProgram(void) {
             STACK_POP(Box loperand);
 
             if (type(loperand) == VAL_INT && type(roperand) == VAL_INT) {
-                int value = unwrapInt(loperand) + unwrapInt(roperand);
-                STACK_PUSH(createBox(&value, VAL_INT));
-            } else {
-                void *lval = &loperand;
-                void *rval = &roperand;
+                int lv = loperand.int32;
+                int rv = roperand.int32;
+                int result = lv + rv;
 
-                double castedValue;
+                if ((lv < 0 && rv < 0 && result >= 0) || (lv > 0 && rv > 0 && result <= 0)) {
+                    double promotion = (double)lv + (double)rv;
+                    STACK_PUSH(createBox(&promotion, VAL_FLOAT));
+                } else {
+                    STACK_PUSH(createBox(&result, VAL_INT));
+                }
+            } else {
+                double lv = loperand.float64;
+                double rv = roperand.float64;
+
                 if (type(loperand) == VAL_INT) {
-                    castedValue = unwrapInt(loperand);
-                    lval = &castedValue;
+                    lv = (double)loperand.int32;
                 } else if (type(roperand) == VAL_INT) {
-                    castedValue = unwrapInt(roperand);
-                    rval = &castedValue;
+                    rv = (double)roperand.int32;
                 }
 
-                double result = *(double *)lval + *(double *)rval;
+                double result = lv + rv;
                 STACK_PUSH(createBox(&result, VAL_FLOAT));
             }
             break;
@@ -102,22 +70,27 @@ void executeProgram(void) {
             STACK_POP(Box loperand);
 
             if (type(loperand) == VAL_INT && type(roperand) == VAL_INT) {
-                int value = unwrapInt(loperand) - unwrapInt(roperand);
-                STACK_PUSH(createBox(&value, VAL_INT));
-            } else {
-                void *lval = &loperand;
-                void *rval = &roperand;
+                int lv = loperand.int32;
+                int rv = roperand.int32;
+                int result = lv - rv;
 
-                double castedValue;
+                if (result > lv) {
+                    double promotion = (double)lv - (double)rv;
+                    STACK_PUSH(createBox(&promotion, VAL_FLOAT));
+                } else {
+                    STACK_PUSH(createBox(&result, VAL_INT));
+                }
+            } else {
+                double lv = loperand.float64;
+                double rv = roperand.float64;
+
                 if (type(loperand) == VAL_INT) {
-                    castedValue = unwrapInt(loperand);
-                    lval = &castedValue;
+                    lv = (double)loperand.int32;
                 } else if (type(roperand) == VAL_INT) {
-                    castedValue = unwrapInt(roperand);
-                    rval = &castedValue;
+                    rv = (double)roperand.int32;
                 }
 
-                double result = *(double *)lval - *(double *)rval;
+                double result = lv - rv;
                 STACK_PUSH(createBox(&result, VAL_FLOAT));
             }
             break;
@@ -127,22 +100,27 @@ void executeProgram(void) {
             STACK_POP(Box loperand);
 
             if (type(loperand) == VAL_INT && type(roperand) == VAL_INT) {
-                int value = unwrapInt(loperand) * unwrapInt(roperand);
-                STACK_PUSH(createBox(&value, VAL_INT));
-            } else {
-                void *lval = &loperand;
-                void *rval = &roperand;
+                int lv = loperand.int32;
+                int rv = roperand.int32;
+                int result = lv * rv;
 
-                double castedValue;
+                if ((lv < 0 && rv < 0 && result >= 0) || (lv > 0 && rv > 0 && result <= 0)) {
+                    double promotion = (double)lv * (double)rv;
+                    STACK_PUSH(createBox(&promotion, VAL_FLOAT));
+                } else {
+                    STACK_PUSH(createBox(&result, VAL_INT));
+                }
+            } else {
+                double lv = loperand.float64;
+                double rv = roperand.float64;
+
                 if (type(loperand) == VAL_INT) {
-                    castedValue = unwrapInt(loperand);
-                    lval = &castedValue;
+                    lv = (double)loperand.int32;
                 } else if (type(roperand) == VAL_INT) {
-                    castedValue = unwrapInt(roperand);
-                    rval = &castedValue;
+                    rv = (double)roperand.int32;
                 }
 
-                double result = *(double *)lval * *(double *)rval;
+                double result = lv * rv;
                 STACK_PUSH(createBox(&result, VAL_FLOAT));
             }
             break;
@@ -152,64 +130,119 @@ void executeProgram(void) {
             STACK_POP(Box loperand);
 
             if (type(loperand) == VAL_INT && type(roperand) == VAL_INT) {
-                int value = unwrapInt(loperand) / unwrapInt(roperand);
-                STACK_PUSH(createBox(&value, VAL_INT));
+                int result = loperand.int32 / roperand.int32;
+                STACK_PUSH(createBox(&result, VAL_INT));
             } else {
-                void *lval = &loperand;
-                void *rval = &roperand;
+                double lv = loperand.float64;
+                double rv = roperand.float64;
 
-                double castedValue;
                 if (type(loperand) == VAL_INT) {
-                    castedValue = unwrapInt(loperand);
-                    lval = &castedValue;
+                    lv = (double)loperand.int32;
                 } else if (type(roperand) == VAL_INT) {
-                    castedValue = unwrapInt(roperand);
-                    rval = &castedValue;
+                    rv = (double)roperand.int32;
                 }
 
-                double result = *(double *)lval / *(double *)rval;
+                double result = lv / rv;
                 STACK_PUSH(createBox(&result, VAL_FLOAT));
             }
             break;
         }
         case INST_LOGICAL_NOT: {
-            STACK_POP(Box value);
+            int result;
 
+            STACK_POP(Box value);
             switch (type(value)) {
             case VAL_INT: {
-                int v = !unwrapInt(value);
-                STACK_PUSH(createBox(&v, VAL_INT));
+                result = !value.int32;
                 break;
             }
             case VAL_FLOAT: {
-                double v = !value;
-                STACK_PUSH(createBox(&v, VAL_INT));
+                result = !value.float64;
                 break;
             }
             }
+            STACK_PUSH(createBox(&result, VAL_INT));
             break;
         }
-        case INST_CMP:
-            CMP(unwrapInt(vm->program[vm->pc].operand));
+        case INST_CMP: {
+            int result;
+
+            STACK_POP(Box roperand);
+            STACK_POP(Box loperand);
+
+            if (type(roperand) == VAL_INT && type(loperand) == VAL_INT) {
+                    switch(vm->program[vm->pc].operand.int32) {
+                    case CMP_EQ:
+                        result = loperand.int32 == roperand.int32;
+                        break;
+                    case CMP_NE:
+                        result = loperand.int32 != roperand.int32;
+                        break;
+                    case CMP_GE:
+                        result = loperand.int32 >= roperand.int32;
+                        break;
+                    case CMP_GT:
+                        result = loperand.int32 > roperand.int32;
+                        break;
+                    case CMP_LE:
+                        result = loperand.int32 <= roperand.int32;
+                        break;
+                    case CMP_LT:
+                        result = loperand.int32 < roperand.int32;
+                        break;
+                    }
+            } else {
+                float lv = loperand.float64;
+                float rv = roperand.float64;
+
+                if (type(loperand) == VAL_INT) {
+                    lv = (double)loperand.int32;
+                } else if (type(roperand) == VAL_INT) {
+                    rv = (double)roperand.int32;
+                }
+
+                switch(vm->program[vm->pc].operand.int32) {
+                case CMP_EQ:
+                    result = lv == rv;
+                    break;
+                case CMP_NE:
+                    result = lv != rv;
+                    break;
+                case CMP_GE:
+                    result = lv >= rv;
+                    break;
+                case CMP_GT:
+                    result = lv > rv;
+                    break;
+                case CMP_LE:
+                    result = lv <= rv;
+                    break;
+                case CMP_LT:
+                    result = lv < rv;
+                    break;
+                }
+            }
+            STACK_PUSH(createBox(&result, VAL_INT));
             break;
+        }
         case INST_CALL: {
             int nextInstruction = vm->pc + 1;
-            
+
             CALLSTACK_PUSH(createBox(&nextInstruction, VAL_INT));
             CALLSTACK_PUSH(createBox(&vm->sp, VAL_INT));
 
-            vm->pc = unwrapInt(vm->program[vm->pc].operand);
+            vm->pc = vm->program[vm->pc].operand.int32;
             continue;
         }
         case INST_RET: {
             STACK_POP(Box returnedValue);
 
-            vm->sp = unwrapInt(vm->callStack[vm->csp]);
+            vm->sp = vm->callStack[vm->csp].int32;
             vm->csp -= 1;
-            vm->pc = unwrapInt(vm->callStack[vm->csp]);
+            vm->pc = vm->callStack[vm->csp].int32;
             vm->csp -= 1;
 
-            int numberOfArgs = unwrapInt(vm->callStack[vm->csp]);
+            int numberOfArgs = vm->callStack[vm->csp].int32;
             vm->csp -= 1;
             vm->csp -= numberOfArgs;
 
@@ -217,24 +250,24 @@ void executeProgram(void) {
             continue;
         }
         case INST_JMP:
-            vm->pc += unwrapInt(vm->program[vm->pc].operand);
+            vm->pc += vm->program[vm->pc].operand.int32;
             continue;
         case INST_PUSH_ARG:
             vm->csp += 1;
             STACK_POP(vm->callStack[vm->csp]);
             break;
         case INST_FETCH_ARG: {
-            int index = unwrapInt(vm->program[vm->pc].operand);
-            int basept = vm->csp - 2 - unwrapInt(vm->callStack[vm->csp - 2]);
+            int index = vm->program[vm->pc].operand.int32;
+            int basept = vm->csp - 2 - vm->callStack[vm->csp - 2].int32;
             STACK_PUSH(vm->callStack[basept + index]);
             break;
         }
-        case INST_CJMP: {
+        case INST_JMP_IF_NOT: {
             STACK_POP(Box value);
 
-            int shouldJump = unwrapInt(value);
+            int shouldJump = !value.int32;
             if (shouldJump || vm->conditionBreaker) {
-                vm->pc += unwrapInt(vm->program[vm->pc].operand);
+                vm->pc += vm->program[vm->pc].operand.int32;
                 continue;
             };
             break;
@@ -245,6 +278,18 @@ void executeProgram(void) {
         case INST_UNSET_CB:
             vm->conditionBreaker = 0;
             break;
+        case INST_STACK_SWEEP:
+            vm->sp -= vm->program[vm->pc].operand.int32;
+            break;
+        case INST_FETCH_VAR: {
+            Box value = vm->operandStack[vm->program[vm->pc].operand.int32];
+            STACK_PUSH(createBox(&value, type(value)));
+            break;
+        }
+        case INST_ASSIGN_VAR: {
+            STACK_POP(vm->operandStack[vm->program[vm->pc].operand.int32]);
+            break;
+        }
         }
 
         if (vm->csp >= CALLSTACK_MAX_SIZE) {
@@ -255,19 +300,21 @@ void executeProgram(void) {
         vm->pc += 1;
     }
 
-    memoryDump();
+    dumpOperandStack();
     dumpCallStack();
 }
 
 char* stringifyInst(InstType type) {
     switch (type) {
+    case INST_ASSIGN_VAR: return "INST_ASSIGN_VAR";
+    case INST_STACK_SWEEP: return "INST_STACK_SWEEP";
     case INST_FETCH_ARG: return "INST_FETCH_ARG";
     case INST_PUSH_ARG: return "INST_PUSH_ARG";
     case INST_CALL: return "INST_CALL";
     case INST_RET: return "INST_RET";
     case INST_JMP: return "INST_JMP";
-    case INST_CJMP: return "INST_CJMP";
-    case INST_PUSH: return "INST_PUSH";
+    case INST_JMP_IF_NOT: return "INST_JMP_IF_NOT";
+    case INST_STACK_PUSH: return "INST_PUSH";
     case INST_ADD: return "INST_ADD";
     case INST_SUB: return "INST_SUB";
     case INST_MULT: return "INST_MULT";
@@ -276,28 +323,29 @@ char* stringifyInst(InstType type) {
     case INST_LOGICAL_NOT: return "INST_LOGICAL_NOT";
     case INST_SET_CB: return "INST_SET_CB";
     case INST_UNSET_CB: return "INST_UNSET_CB";
+    case INST_FETCH_VAR: return "INST_FETCH_VAR";
     }
 }
 
 void printBox(Box box) {
     switch (type(box)) {
     case VAL_INT:
-        printf("%d", unwrapInt(box));
+        printf("%d", box.int32);
         break;
     case VAL_FLOAT:
-        printf("%f", box);
+        printf("%f", box.float64);
         break;
     default:
         break;
     }
 }
 
-void programDump(void) {
+void dumpProgram(void) {
     printf("===== DISASSEMBLY =====\n\n");
 
     for (int i = 0; i < vm->programLength; i++) {
         printf("PC: (0x%04X) %s ", i, stringifyInst(vm->program[i].type));
-        if (vm->program[i].operand) {
+        if (vm->program[i].operand.float64) {
             printBox(vm->program[i].operand);
         }
         printf("\n");
@@ -305,15 +353,15 @@ void programDump(void) {
     printf("\n");
 }
 
-void memoryDump(void) {
-    printf("===== RUNTIME STACK =====\n\n");
+void dumpOperandStack(void) {
+    printf("===== OPERAND STACK =====\n\n");
 
     if (vm->sp < 0) {
         printf("[EMPTY]\n");
     } else {
         printf("> ");
         for (int i = vm->sp; i >= 0; i--) {
-            printBox(vm->stack[i]);
+            printBox(vm->operandStack[i]);
             printf(" ");
         }
         printf("\n");

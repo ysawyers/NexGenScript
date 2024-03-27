@@ -17,21 +17,25 @@ typedef enum {
 } Condition;
 
 typedef enum {
-    INST_PUSH,
-    
+    // STACK
+    INST_STACK_PUSH,
+    INST_STACK_SWEEP,
+    INST_FETCH_VAR,
+    INST_ASSIGN_VAR,
+
     // OPERATIONS
     INST_ADD,
     INST_SUB,
     INST_MULT,
     INST_DIV,
-    INST_LOGICAL_NOT,
     INST_CMP,
+    INST_LOGICAL_NOT,
 
-    // LOOP (IMPLEMENT WHAT THE HECK WE ALREADY HAVE A USE CASE FOR THIS!!)
+    // JUMPS
     INST_JMP,
-    
+    INST_JMP_IF_NOT,
+
     // CONDITIONALS
-    INST_CJMP,
     INST_SET_CB,
     INST_UNSET_CB,
     
@@ -48,7 +52,7 @@ typedef struct {
 } Inst;
 
 typedef struct {
-    Box stack[MEM_SIZE];
+    Box operandStack[MEM_SIZE];
     int sp;
 
     Box callStack[CALLSTACK_MAX_SIZE];
@@ -67,12 +71,11 @@ void freeVM(void);
 
 void executeProgram(void);
 
-void programDump(void);
-
-void memoryDump(void);
-
+void dumpProgram(void);
+void dumpOperandStack(void);
 void dumpCallStack(void);
 
+char* stringifyInst(InstType type);
 void printBox(Box box);
 
 #endif

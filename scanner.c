@@ -41,10 +41,12 @@ Token isSymbolOrKeyword(void) {
 
     int matchedKeyword = 0;
 
-    matchedKeyword = compareKeyword("var", 3);
+    matchedKeyword = compareKeyword("let", 3);
+    matchedKeyword = compareKeyword("mut", 3);
     matchedKeyword = compareKeyword("if", 2);
     matchedKeyword = compareKeyword("else", 4);
     matchedKeyword = compareKeyword("return", 6);
+    matchedKeyword = compareKeyword("loop", 4);
 
     return constructToken(matchedKeyword ? TOK_KEYWORD : TOK_IDENT);
 }
@@ -109,7 +111,12 @@ Token nextToken(void) {
                 tok = constructToken(TOK_MINUS);
                 break;
             case '/':
-                tok = constructToken(TOK_DIV);
+                if (*scanner.current == '/') {
+                    while (*scanner.current != '\n') scanner.current++;
+                    scanner.current++;
+                } else {
+                    tok = constructToken(TOK_DIV);
+                }
                 break;
             case '*':
                 tok = constructToken(TOK_MULT);

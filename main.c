@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
 
     initVM(program, programSize);
 
-    programDump();
+    dumpProgram();
     executeProgram();
 
     freeVM();

@@ -32,12 +32,23 @@ typedef struct {
 } Label;
 
 typedef struct {
-    Token *params; // something or NULL
+    Token symbol;
+    int depth;
+} Var;
+
+typedef struct {
+    Token *params;
 } Scope;
 
 typedef struct {
+    int currentDepth;
+
     Label labels[100];
     int labelsLength;
+    
+    int varsLength;
+    int varsCapacity;
+    Var *vars;
 
     Scope currentScope;
     Inst *program;
@@ -47,7 +58,7 @@ typedef struct {
 Parser parser;
 
 void expression(void);
-void stmt(void);
+int stmt(void);
 int functionCall(void);
 
 void pushInst(Inst inst) {
@@ -65,7 +76,31 @@ int matchingTokenLexeme(Token a, Token b) {
     return !memcmp(a.lexeme, b.lexeme, a.length);
 }
 
-// primary := functionCall | STRING | CHARACTER | DECIMAL | INTEGER | "(" expression ")" | IDENT
+int var(void) {
+    Token ident = pushForward();
+
+    // 1. check variables first
+    for (int i = parser.varsLength - 1; i >= 0; i--) {
+        Var var = parser.vars[i];
+        if (matchingTokenLexeme(var.symbol, ident) && var.depth <= parser.currentDepth) {
+            pushInst((Inst){.type = INST_FETCH_VAR, .operand = createBox(&i, VAL_INT)});
+            return 1;
+        }
+    }
+
+    // 2. check paramaters
+    for (int i = 0; parser.currentScope.params + i != NULL; i++) {
+        if (matchingTokenLexeme(parser.currentScope.params[i], ident)) {
+            pushInst((Inst){.type = INST_FETCH_ARG, .operand = createBox(&i, VAL_INT)});
+            return 1;
+        }
+    }
+
+    pushBack();
+    return 0;
+}
+
+// primary := functionCall | var | STRING | CHARACTER | DECIMAL | INTEGER | "(" expression ")"
 void primary(void) {
     if (tr.curr.type == TOK_LPAREN) {
         pushForward();
@@ -82,30 +117,20 @@ void primary(void) {
         switch (tr.curr.type) {
         case TOK_INTEGER: {
             long v = strtol(tr.curr.lexeme, &endptr, 10);
-            pushInst((Inst){.type = INST_PUSH, .operand = createBox(&v, VAL_INT)});
+            pushInst((Inst){.type = INST_STACK_PUSH, .operand = createBox(&v, VAL_INT)});
             break;
         }
         case TOK_FLOAT: {
             double v = strtod(tr.curr.lexeme, &endptr);
-            pushInst((Inst){.type = INST_PUSH, .operand = createBox(&v, VAL_FLOAT)});
+            pushInst((Inst){.type = INST_STACK_PUSH, .operand = createBox(&v, VAL_FLOAT)});
             break;
         }
         case TOK_IDENT: {
             pushBack();
-            if (!functionCall()) {
+            if (!functionCall() && !var()) {
                 Token ident = pushForward();
-
-                // 1. check local scope
-
-                // 2. check paramaters (only applies inside function decl)
-                for (int i = 0; parser.currentScope.params + i != NULL; i++) {
-                    if (matchingTokenLexeme(parser.currentScope.params[i], ident)) {
-                        pushInst((Inst){.type = INST_FETCH_ARG, .operand = createBox(&i, VAL_INT)});
-                        break;
-                    }
-                }
-
-                // 3. check global scope
+                fprintf(stderr, "line %d: undeclared identifier X\n", ident.line);
+                exit(1);
             }
             break;
         }
@@ -236,16 +261,17 @@ void expression(void) {
     equality();
 }
 
-// declStmt := ("var" | "const") IDENT "=" expression
-int declStmt(void) {
-    Token declType = pushForward();
-    if (matchingKeyword(declType, "var", 3)) {
-        // TODO
-    } else if (matchingKeyword(declType, "const", 5)) {
+// declStmt := "let" [ "mut" ] IDENT "=" expression
+int declStmt(void) {    
+    if (!matchingKeyword(pushForward(), "let", 3)) {
+        pushBack();
+        return 0;
+    }
+
+    if (matchingKeyword(pushForward(), "mut", 3)) {
         // TODO
     } else {
         pushBack();
-        return 0;
     }
 
     Token ident = pushForward(); 
@@ -253,6 +279,21 @@ int declStmt(void) {
         fprintf(stderr, "line %d: expected identifier\n", ident.line);
         exit(1);
     }
+
+    for (int i = parser.varsLength - 1; i >= 0; i--) {
+        Var var = parser.vars[i];
+        if (var.depth == parser.currentDepth && matchingTokenLexeme(var.symbol, ident)) {
+            fprintf(stderr, "line %d: identifier X has already been declared on line %d\n", ident.line, var.symbol.line);
+            exit(1);
+        }
+    }
+
+    if (parser.varsLength >= parser.varsCapacity) {
+        parser.varsCapacity *= 2;
+        parser.vars = (Var *)realloc(parser.vars, sizeof(Var) * parser.varsCapacity);
+    }
+    parser.vars[parser.varsLength] = (Var){.depth = parser.currentDepth, .symbol = ident};
+    parser.varsLength += 1; 
 
     Token assignment = pushForward();
     if (assignment.type != TOK_ASSIGNMENT) {
@@ -268,6 +309,9 @@ int declStmt(void) {
 
 // programBlock := "{" {: stmt [ "return" expression; (then BREAK) ] :} "}"
 void programBlock(void) {
+    int prevVarsLength = parser.varsLength;
+    parser.currentDepth += 1;
+
     Token lsquirly = pushForward();
     if (lsquirly.type != TOK_LSQUIRLY) {
         fprintf(stderr, "line %d: expected {\n", lsquirly.line);
@@ -285,7 +329,10 @@ void programBlock(void) {
             break;
         default:
             pushBack();
-            stmt();
+            if (!stmt()) {
+                fprintf(stderr, "line %d: unrecognizable statement\n", pushForward().line);
+                exit(1);
+            };
             goto step;
         }
 
@@ -293,35 +340,47 @@ void programBlock(void) {
         fprintf(stderr, "line %d: expected closing } for block statement\n", terminator.line);
         exit(1);
     }
+
+    parser.currentDepth -= 1;
+    int cleanup = parser.varsLength - prevVarsLength;
+    pushInst((Inst){.type = INST_STACK_SWEEP, .operand = createBox(&cleanup, VAL_INT)});
+    parser.varsLength = prevVarsLength;
 }
 
-// conditionalBlock := "(" expression ")" programBlock
+// conditionalBlock := expression programBlock
 void conditionalBlock(void) {
-    Token lparen = pushForward();
-    if (lparen.type != TOK_LPAREN) {
-        fprintf(stderr, "line %d: expected (\n", lparen.line);
-        exit(1);
-    }
-
     pushForward();
     expression();
 
-    // logical NOT condition to check if a jump (skip) is necessary (will be true if condition was false)
-    pushInst((Inst){.type = INST_LOGICAL_NOT});
-
-    pushInst((Inst){.type = INST_CJMP});
+    pushInst((Inst){.type = INST_JMP_IF_NOT});
     Inst *cjmp = &parser.program[*parser.programLength - 1];
-    int jumpFrom = *parser.programLength;    
-
-    Token rparen = pushForward();
-    if (rparen.type != TOK_RPAREN) {
-        fprintf(stderr, "line %d: expected )\n", rparen.line);
-        exit(1);
-    }
+    int jumpFrom = *parser.programLength;   
 
     programBlock();
 
     pushInst((Inst){.type = INST_SET_CB});
+
+    // backpatch offset of programBlock
+    int relativeAddr = *parser.programLength - jumpFrom + 1;
+    cjmp->operand = createBox(&relativeAddr, VAL_INT);
+}
+
+// loopBlock := expression programBlock
+void loopBlock(void) {
+    int loopCondition = *parser.programLength;
+
+    pushForward();
+    expression();
+
+    pushInst((Inst){.type = INST_JMP_IF_NOT});
+    Inst *cjmp = &parser.program[*parser.programLength - 1];
+    int jumpFrom = *parser.programLength;   
+
+    programBlock();
+
+    int absJmp = -(*parser.programLength - loopCondition);
+    pushInst((Inst){.type = INST_JMP, .operand = createBox(&absJmp, VAL_INT)});
+    // pushInst((Inst){.type = INST_SET_CB});
 
     // backpatch offset of programBlock
     int relativeAddr = *parser.programLength - jumpFrom + 1;
@@ -334,10 +393,10 @@ int ifStmt(void) {
         conditionalBlock();
         if (matchingKeyword(pushForward(), "else", 4)) {
             if (!ifStmt()) {
-                int fallback = 0;
-                pushInst((Inst){.type = INST_PUSH, .operand = createBox(&fallback, VAL_INT)});
+                int fallthrough = 1;
+                pushInst((Inst){.type = INST_STACK_PUSH, .operand = createBox(&fallthrough, VAL_INT)});
 
-                pushInst((Inst){.type = INST_CJMP});
+                pushInst((Inst){.type = INST_JMP_IF_NOT});
                 Inst *cjmp = &parser.program[*parser.programLength - 1];
                 int jumpFrom = *parser.programLength;
 
@@ -369,22 +428,64 @@ int returnStmt(void) {
     return 0;
 }
 
-// stmt := functionCall; | declStmt; | returnStmt; | ifStmt
-void stmt(void) {
-    if (declStmt() || functionCall() || returnStmt()) {
+// assignmentStmt := ident "=" expression
+int assignmentStmt(void) {
+    Token ident = pushForward();
+    if (ident.type == TOK_IDENT) {
+        for (int i = parser.varsLength - 1; i >= 0; i--) {
+            Var var = parser.vars[i];
+            if (var.depth <= parser.currentDepth && matchingTokenLexeme(var.symbol, ident)) {
+                Token assignment = pushForward();
+                if (assignment.type != TOK_ASSIGNMENT) {
+                    fprintf(stderr, "line %d: assignment to undeclared identifier X\n", assignment.line);
+                    exit(1);
+                }
+
+                pushForward();
+                expression();
+
+                pushInst((Inst){.type = INST_ASSIGN_VAR, .operand = createBox(&i, VAL_INT)});
+                return 1;
+            }
+        }
+    }
+    pushBack();
+    return 0;
+}
+
+int loopStmt(void) {
+    Token ident = pushForward();
+    if (matchingKeyword(ident, "loop", 4)) {
+        loopBlock();
+        return 1;
+    }
+    pushBack();
+    return 0;
+}
+
+// stmt := functionCall; | declStmt; | returnStmt; | assignmentStmt; | ifStmt | loopStmt
+int stmt(void) {
+    int result = 0;
+
+    if (declStmt() || functionCall() || returnStmt() || assignmentStmt()) {
+        result = 1;
         Token semicol = pushForward();
         if (semicol.type != TOK_SEMICOL) {
             fprintf(stderr, "line %d: missing semicolon\n", semicol.line);
             exit(1);
         }
     }
-    ifStmt();
+    if (ifStmt() || loopStmt()) result = 1;
+
+    return result;
 }
 
 // args := [ expression {: , expression :} ]
 void args(void) {
+    int numArgs = 0;
+
     if (pushForward().type != TOK_RPAREN) {
-        int numArgs = 1;
+        numArgs += 1;
 
         expression();
         pushInst((Inst){.type = INST_PUSH_ARG});
@@ -396,10 +497,10 @@ void args(void) {
 
             numArgs += 1;
         }
-
-        pushInst((Inst){.type = INST_PUSH, .operand = createBox(&numArgs, VAL_INT)});
-        pushInst((Inst){.type = INST_PUSH_ARG});
     }
+
+    pushInst((Inst){.type = INST_STACK_PUSH, .operand = createBox(&numArgs, VAL_INT)});
+    pushInst((Inst){.type = INST_PUSH_ARG});
     pushBack();
 }
 
@@ -464,7 +565,7 @@ void params(Token **params) {
 }
 
 // functionDecl := "fun" IDENT "(" params ")" programBlock
-void functionDecl(void) {
+int functionDecl(void) {
     if (matchingKeyword(pushForward(), "fun", 3)) {
         Token ident = pushForward();
         if (ident.type != TOK_IDENT) {
@@ -506,24 +607,29 @@ void functionDecl(void) {
         // backpatch offset from function
         int relativeAddr = *parser.programLength - jumpFrom + 1;
         jmp->operand = createBox(&relativeAddr, VAL_INT);
-    } else {
-        pushBack();
+        return 1;
     }
+    pushBack();
+    return 0;
 }
 
-// global := {: stmt | function :}
-void global(void) {
+// globalScope := {: stmt | function :}
+void globalScope(void) {
     while (pushForward().type != TOK_EOF) {
         pushBack();
-        stmt();
-        functionDecl();
+        if (!stmt() && !functionDecl()) {
+            fprintf(stderr, "line %d: unrecognizable statement\n", pushForward().line);
+            exit(1);
+        }
     }
 }
 
 Inst* compile(int *programLength) {
     parser.programLength = programLength;
     parser.program = (Inst *)malloc(sizeof(Inst) * 4096);
-    parser.labelsLength = 0;
-    global();
+    parser.varsCapacity = 6;
+    parser.vars = (Var *)malloc(sizeof(Var) * parser.varsCapacity);
+    globalScope();
+    free(parser.vars);
     return parser.program;
 }
