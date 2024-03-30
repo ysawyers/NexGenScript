@@ -3,6 +3,7 @@
 #include "scanner.h"
 #include "vm.h"
 #include "compiler.h"
+#include "utils.h"
 
 char* readFile(const char *filepath) {
     FILE *file;
@@ -12,7 +13,7 @@ char* readFile(const char *filepath) {
     size_t fileSize = ftell(file);
     rewind(file);
 
-    char *buffer = (char *)malloc(fileSize + 1);
+    char *buffer = (char *)safe_malloc(fileSize + 1);
     unsigned long bytesRead = fread(buffer, sizeof(char), fileSize, file);
     buffer[bytesRead] = '\0';
 

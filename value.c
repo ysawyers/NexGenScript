@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include "value.h"
 
 inline Box createBox(void *value, ValueType type) {
@@ -10,12 +11,13 @@ inline Box createBox(void *value, ValueType type) {
         break;
     case VAL_INT:
         box.int32 = *((int32_t *)value);
+        ((uint8_t *)(&box))[6] = 0xF8 | type;
         break;
     case VAL_STRING:
         box.obj = (uint64_t)value;
+        ((uint8_t *)(&box))[6] = 0xF8 | type;
         break;
     }
 
-    ((uint8_t *)(&box))[6] = 0xF8 | type;
     return box;
 }

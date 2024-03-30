@@ -52,9 +52,14 @@ typedef struct {
 } Inst;
 
 typedef struct {
+    size_t count;
+    void *ref;
+} Reference;
+
+typedef struct {
     Box operandStack[MEM_SIZE];
     int sp;
-
+    
     Box callStack[CALLSTACK_MAX_SIZE];
     int csp;
 

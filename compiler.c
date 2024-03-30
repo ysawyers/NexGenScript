@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "compiler.h"
+#include "utils.h"
 
 typedef struct {
     Token prev;
@@ -133,10 +134,15 @@ void primary(void) {
             break;
         }
         case TOK_STRING: {
-            char *str = (char *)malloc(tr.curr.length + 1);
+            char *str = (char *)safe_malloc(tr.curr.length + 1);
             memcpy(str, tr.curr.lexeme, tr.curr.length);
             str[tr.curr.length] = '\0';
-            pushInst((Inst){.type = INST_STACK_PUSH, .operand = createBox(str, VAL_STRING)});
+
+            Object *obj = (Object *)safe_malloc(sizeof(Object));
+            obj->length = tr.curr.length + 1;
+            obj->ref = str;
+
+            pushInst((Inst){.type = INST_STACK_PUSH, .operand = createBox(obj, VAL_STRING)});
             break;
         }
         default:
@@ -266,17 +272,11 @@ void expression(void) {
     equality();
 }
 
-// declStmt := "let" [ "mut" ] IDENT "=" expression
+// declStmt := "let" IDENT "=" expression
 int declStmt(void) {    
     if (!matchingKeyword(pushForward(), "let", 3)) {
         pushBack();
         return 0;
-    }
-
-    if (matchingKeyword(pushForward(), "mut", 3)) {
-        // TODO
-    } else {
-        pushBack();
     }
 
     Token ident = pushForward(); 
@@ -288,7 +288,7 @@ int declStmt(void) {
     for (int i = parser.varsLength - 1; i >= 0; i--) {
         Var var = parser.vars[i];
         if (var.depth == parser.currentDepth && matchingTokenLexeme(var.symbol, ident)) {
-            fprintf(stderr, "line %d: identifier X has already been declared on line %d\n", ident.line, var.symbol.line);
+            fprintf(stderr, "line %d: identifier (X) has already been declared on line %d\n", ident.line, var.symbol.line);
             exit(1);
         }
     }
@@ -436,18 +436,17 @@ int returnStmt(void) {
 int assignmentStmt(void) {
     Token ident = pushForward();
     if (ident.type == TOK_IDENT) {
+        Token assignment = pushForward();
+        if (assignment.type == TOK_ASSIGNMENT) {
+            fprintf(stderr, "line %d: must provide declaration for (X) before assignment\n", assignment.line);
+            exit(1);
+        }
+
         for (int i = parser.varsLength - 1; i >= 0; i--) {
             Var var = parser.vars[i];
             if (var.depth <= parser.currentDepth && matchingTokenLexeme(var.symbol, ident)) {
-                Token assignment = pushForward();
-                if (assignment.type != TOK_ASSIGNMENT) {
-                    fprintf(stderr, "line %d: assignment to undeclared identifier X\n", assignment.line);
-                    exit(1);
-                }
-
                 pushForward();
                 expression();
-
                 pushInst((Inst){.type = INST_ASSIGN_VAR, .operand = createBox(&i, VAL_INT)});
                 return 1;
             }
@@ -471,7 +470,10 @@ int loopStmt(void) {
 int stmt(void) {
     int result = 0;
 
-    if (declStmt() || functionCall() || returnStmt() || assignmentStmt()) {
+    if (ifStmt() || loopStmt()) {
+        result = 1;
+    // assignmentStmt() must be called at the very end since it depends on looking forward twice (just a flaw with implementation)
+    } else if (declStmt() || functionCall() || returnStmt() || assignmentStmt()) {
         result = 1;
         Token semicol = pushForward();
         if (semicol.type != TOK_SEMICOL) {
@@ -479,7 +481,6 @@ int stmt(void) {
             exit(1);
         }
     }
-    if (ifStmt() || loopStmt()) result = 1;
 
     return result;
 }
@@ -546,11 +547,7 @@ void params(Token **params) {
     };
 
     int paramsLength = 6;
-    *params = (Token *)malloc(sizeof(Token) * paramsLength);
-    if (params == NULL) {
-        fprintf(stderr, "critical: unable to additional memory");
-        exit(1);
-    }
+    *params = (Token *)safe_malloc(sizeof(Token) * paramsLength);
 
     int i = 0;
     (*params)[i++] = param;
@@ -625,7 +622,7 @@ int functionDecl(void) {
 void globalScope(void) {
     while (pushForward().type != TOK_EOF) {
         pushBack();
-        if (!stmt() && !functionDecl()) {
+        if (!functionDecl() && !stmt()) {
             fprintf(stderr, "line %d: unrecognizable statement\n", pushForward().line);
             exit(1);
         }
@@ -634,18 +631,10 @@ void globalScope(void) {
 
 Inst* compile(int *programLength) {
     parser.programLength = programLength;
-    parser.program = (Inst *)malloc(sizeof(Inst) * 4096);
-    if (parser.program == NULL) {
-        fprintf(stderr, "critical: unable to additional memory");
-        exit(1);
-    }
+    parser.program = (Inst *)safe_malloc(sizeof(Inst) * 4096);
 
     parser.varsCapacity = 6;
-    parser.vars = (Var *)malloc(sizeof(Var) * parser.varsCapacity);
-    if (parser.vars == NULL) {
-        fprintf(stderr, "critical: unable to additional memory");
-        exit(1);
-    }
+    parser.vars = (Var *)safe_malloc(sizeof(Var) * parser.varsCapacity);
     
     globalScope();
 

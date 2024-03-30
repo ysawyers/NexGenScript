@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "vm.h"
+#include "utils.h"
 
 #define STACK_PUSH(value) vm->sp += 1;                      \
                           vm->operandStack[vm->sp] = value; \
@@ -14,7 +16,7 @@
 VM *vm;
 
 void initVM(Inst *program, size_t length) {
-    vm = calloc(1, sizeof(VM));
+    vm = safe_calloc(1, sizeof(VM));
     vm->csp = -1;
     vm->sp = -1;
     vm->programLength = length;
@@ -24,6 +26,18 @@ void initVM(Inst *program, size_t length) {
 void freeVM(void) {
     free(vm->program);
     free(vm);
+}
+
+void cleanup_object(Box box) {
+    for (int i = vm->sp; i >= 0; i--) {
+        if (vm->operandStack[i].obj == box.obj) return;
+    }
+    
+    switch (TYPE(box)) {
+    case VAL_STRING:
+        free((char *)(((Object *)box.obj)->ref));
+        free((Object *)box.obj);
+    }
 }
 
 void executeProgram(void) {
@@ -39,30 +53,67 @@ void executeProgram(void) {
             STACK_POP(Box roperand);
             STACK_POP(Box loperand);
 
-            if (TYPE(loperand) == VAL_INT && TYPE(roperand) == VAL_INT) {
-                int lv = loperand.int32;
-                int rv = roperand.int32;
-                int result = lv + rv;
+            ValueType ltype = TYPE(loperand);
+            ValueType rtype = TYPE(roperand);
 
-                if ((lv < 0 && rv < 0 && result >= 0) || (lv > 0 && rv > 0 && result <= 0)) {
-                    double promotion = (double)lv + (double)rv;
-                    STACK_PUSH(createBox(&promotion, VAL_FLOAT));
-                } else {
-                    STACK_PUSH(createBox(&result, VAL_INT));
+            if (!(ltype ^ rtype)) {
+                switch (ltype) {
+                case VAL_INT: {
+                    int lv = loperand.int32;
+                    int rv = roperand.int32;
+                    int result = lv + rv;
+
+                    if ((lv < 0 && rv < 0 && result >= 0) || (lv > 0 && rv > 0 && result <= 0)) {
+                        double promotion = (double)lv + (double)rv;
+                        STACK_PUSH(createBox(&promotion, VAL_FLOAT));
+                    } else {
+                        STACK_PUSH(createBox(&result, VAL_INT));
+                    }
+                    break;
                 }
-            } else {
-                double lv = loperand.float64;
-                double rv = roperand.float64;
+                case VAL_STRING: {
+                    Object *lobj = (Object *)loperand.obj;
+                    Object *robj = (Object *)roperand.obj;
+                    size_t newLength = lobj->length - 1 + robj->length - 1;
 
-                if (TYPE(loperand) == VAL_INT) {
-                    lv = (double)loperand.int32;
-                } else if (TYPE(roperand) == VAL_INT) {
-                    rv = (double)roperand.int32;
+                    char *concat = safe_malloc(newLength + 1);               
+                    memcpy(concat, (char *)lobj->ref, lobj->length - 1);
+                    memcpy(concat + lobj->length - 1, (char *)robj->ref, robj->length);
+
+                    Object *obj = safe_malloc(sizeof(Object));
+                    obj->length = newLength;
+                    obj->ref = concat;
+
+                    cleanup_object(loperand);
+                    cleanup_object(roperand);
+
+                    STACK_PUSH(createBox(obj, VAL_STRING));
+                    break;
                 }
-
-                double result = lv + rv;
-                STACK_PUSH(createBox(&result, VAL_FLOAT));
+                case VAL_FLOAT: {
+                    double result = loperand.float64 + roperand.float64;
+                    STACK_PUSH(createBox(&result, VAL_FLOAT));
+                }
+                }
+                break;
             }
+
+            if (ltype == VAL_STRING || rtype == VAL_STRING) {
+                fprintf(stderr, "runtime error: illegal operation between (X) and (X)\n");
+                exit(1);
+            }
+
+            double lv = loperand.float64;
+            double rv = roperand.float64;
+
+            if (ltype == VAL_INT) {
+                lv = (double)loperand.int32;
+            } else if (rtype == VAL_INT) {
+                rv = (double)roperand.int32;
+            }
+
+            double result = lv + rv;
+            STACK_PUSH(createBox(&result, VAL_FLOAT));
             break;
         }
         case INST_SUB: {
@@ -280,11 +331,11 @@ void executeProgram(void) {
             break;
         case INST_STACK_SWEEP:
             for (int i = 0; i < operand.int32; i++) {
-                Box box = vm->operandStack[vm->sp];
-                if (TYPE(box) == VAL_STRING) {
-                    free((char *)box.obj);
-                };
-                vm->sp -= 1;
+                STACK_POP(Box box);
+                switch (TYPE(box)) {
+                case VAL_STRING:
+                    cleanup_object(box);
+                }
             }
             break;
         case INST_FETCH_VAR: {
@@ -342,7 +393,7 @@ void printBox(Box box) {
         printf("%f", box.float64);
         break;
     case VAL_STRING:
-        printf("%s", (char *)box.obj);
+        printf("%s", (char *)(((Object *)box.obj)->ref));
         break;
     default:
         break;

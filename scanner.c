@@ -41,8 +41,8 @@ Token isSymbolOrKeyword(void) {
 
     int matchedKeyword = 0;
 
+    matchedKeyword = compareKeyword("fun", 3);
     matchedKeyword = compareKeyword("let", 3);
-    matchedKeyword = compareKeyword("mut", 3);
     matchedKeyword = compareKeyword("if", 2);
     matchedKeyword = compareKeyword("else", 4);
     matchedKeyword = compareKeyword("return", 6);

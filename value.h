@@ -5,6 +5,11 @@
 
 #define TYPE(box) (!isnan(box.float64) ? VAL_FLOAT : ((uint8_t *)&box)[6] & 0x7)
 
+typedef struct {
+    size_t length;
+    void *ref;
+} Object;
+
 typedef union {
     double  float64;
     int64_t obj : 48;
