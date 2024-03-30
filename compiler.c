@@ -29,7 +29,7 @@ typedef struct {
     Token symbol;
     Token *params;
     int ip;
-} Label;
+} Symbol;
 
 typedef struct {
     Token symbol;
@@ -37,20 +37,18 @@ typedef struct {
 } Var;
 
 typedef struct {
-    Token *params;
-} Scope;
-
-typedef struct {
     int currentDepth;
-
-    Label labels[100];
-    int labelsLength;
     
+    Token *params;
+
+    Var *vars;
     int varsLength;
     int varsCapacity;
-    Var *vars;
+    
+    Symbol symbols[100];
+    int symbolsLength;
+    int symbolsCapacity;
 
-    Scope currentScope;
     Inst *program;
     int *programLength;
 } Parser;
@@ -89,8 +87,8 @@ int var(void) {
     }
 
     // 2. check paramaters
-    for (int i = 0; parser.currentScope.params + i != NULL; i++) {
-        if (matchingTokenLexeme(parser.currentScope.params[i], ident)) {
+    for (int i = 0; parser.params + i != NULL; i++) {
+        if (matchingTokenLexeme(parser.params[i], ident)) {
             pushInst((Inst){.type = INST_FETCH_ARG, .operand = createBox(&i, VAL_INT)});
             return 1;
         }
@@ -129,9 +127,16 @@ void primary(void) {
             pushBack();
             if (!functionCall() && !var()) {
                 Token ident = pushForward();
-                fprintf(stderr, "line %d: undeclared identifier X\n", ident.line);
+                fprintf(stderr, "line %d: could not find symbol or identifier for X\n", ident.line);
                 exit(1);
             }
+            break;
+        }
+        case TOK_STRING: {
+            char *str = (char *)malloc(tr.curr.length + 1);
+            memcpy(str, tr.curr.lexeme, tr.curr.length);
+            str[tr.curr.length] = '\0';
+            pushInst((Inst){.type = INST_STACK_PUSH, .operand = createBox(str, VAL_STRING)});
             break;
         }
         default:
@@ -342,8 +347,8 @@ void programBlock(void) {
     }
 
     parser.currentDepth -= 1;
-    int cleanup = parser.varsLength - prevVarsLength;
-    pushInst((Inst){.type = INST_STACK_SWEEP, .operand = createBox(&cleanup, VAL_INT)});
+    int danglingOperands = parser.varsLength - prevVarsLength;
+    if (danglingOperands) pushInst((Inst){.type = INST_STACK_SWEEP, .operand = createBox(&danglingOperands, VAL_INT)});
     parser.varsLength = prevVarsLength;
 }
 
@@ -380,7 +385,6 @@ void loopBlock(void) {
 
     int absJmp = -(*parser.programLength - loopCondition);
     pushInst((Inst){.type = INST_JMP, .operand = createBox(&absJmp, VAL_INT)});
-    // pushInst((Inst){.type = INST_SET_CB});
 
     // backpatch offset of programBlock
     int relativeAddr = *parser.programLength - jumpFrom + 1;
@@ -508,8 +512,8 @@ void args(void) {
 int functionCall(void) {
     Token ident = pushForward();
 
-    for (int i = 0; i < parser.labelsLength; i++) {
-        if (matchingTokenLexeme(parser.labels[i].symbol, ident)) {
+    for (int i = 0; i < parser.symbolsLength; i++) {
+        if (matchingTokenLexeme(parser.symbols[i].symbol, ident)) {
             Token lparen = pushForward();
             if (lparen.type != TOK_LPAREN) {
                 fprintf(stderr, "line %d: expected (\n", lparen.line);
@@ -524,7 +528,7 @@ int functionCall(void) {
                 exit(1);
             }
 
-            pushInst((Inst){.type = INST_CALL, .operand = createBox(&parser.labels[i].ip, VAL_INT)});
+            pushInst((Inst){.type = INST_CALL, .operand = createBox(&parser.symbols[i].ip, VAL_INT)});
             return 1;
         }
     }
@@ -543,6 +547,10 @@ void params(Token **params) {
 
     int paramsLength = 6;
     *params = (Token *)malloc(sizeof(Token) * paramsLength);
+    if (params == NULL) {
+        fprintf(stderr, "critical: unable to additional memory");
+        exit(1);
+    }
 
     int i = 0;
     (*params)[i++] = param;
@@ -583,12 +591,12 @@ int functionDecl(void) {
             exit(1);
         }
 
-        Label *label = parser.labels + parser.labelsLength;
-        *label = (Label){.symbol = ident, .ip = *parser.programLength};
-        parser.labelsLength += 1;
+        Symbol *symbol = parser.symbols + parser.symbolsLength;
+        *symbol = (Symbol){.symbol = ident, .ip = *parser.programLength};
+        parser.symbolsLength += 1;
 
-        params(&label->params);
-        parser.currentScope.params = label->params;
+        params(&symbol->params);
+        parser.params = symbol->params;
 
         Token rparen = pushForward();
         if (rparen.type != TOK_RPAREN) {
@@ -598,8 +606,8 @@ int functionDecl(void) {
 
         programBlock();
 
-        free(label->params);
-        parser.currentScope.params = NULL;
+        free(symbol->params);
+        parser.params = NULL;
 
         // TODO: PUSH AN UNDEFINED VALUE HERE
         pushInst((Inst){.type = INST_RET});
@@ -627,9 +635,21 @@ void globalScope(void) {
 Inst* compile(int *programLength) {
     parser.programLength = programLength;
     parser.program = (Inst *)malloc(sizeof(Inst) * 4096);
+    if (parser.program == NULL) {
+        fprintf(stderr, "critical: unable to additional memory");
+        exit(1);
+    }
+
     parser.varsCapacity = 6;
     parser.vars = (Var *)malloc(sizeof(Var) * parser.varsCapacity);
+    if (parser.vars == NULL) {
+        fprintf(stderr, "critical: unable to additional memory");
+        exit(1);
+    }
+    
     globalScope();
+
     free(parser.vars);
+    
     return parser.program;
 }

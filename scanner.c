@@ -87,6 +87,16 @@ Token nextToken(void) {
             tok = isNumber();
         } else {
             switch (c) {
+            case '"':
+                scanner.start++;
+                while (*scanner.current != '"' && *scanner.current != '\0') scanner.current++;
+                if (*scanner.current == '\0') {
+                    fprintf(stderr, "you messed up the string bruh");
+                    exit(1);
+                }
+                tok = constructToken(TOK_STRING);
+                scanner.current++;
+                break;
             case ';':
                 tok = constructToken(TOK_SEMICOL);
                 break;
@@ -171,6 +181,7 @@ Token nextToken(void) {
 
 char* stringifyToken(Token token) {
     switch (token.type) {
+    case TOK_STRING: return "TOK_STRING";
     case TOK_COMMA: return "TOK_COMMA";
     case TOK_LSQUIRLY: return "TOK_LSQUIRLY";
     case TOK_RSQUIRLY: return "TOK_RSQUIRLY";

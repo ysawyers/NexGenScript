@@ -1,7 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <math.h>
 #include "vm.h"
 
 #define STACK_PUSH(value) vm->sp += 1;                      \
@@ -16,12 +14,11 @@
 VM *vm;
 
 void initVM(Inst *program, size_t length) {
-    vm = malloc(sizeof(VM));
+    vm = calloc(1, sizeof(VM));
     vm->csp = -1;
     vm->sp = -1;
     vm->programLength = length;
     vm->program = program;
-    vm->conditionBreaker = 0;
 }
 
 void freeVM(void) {
@@ -31,15 +28,18 @@ void freeVM(void) {
 
 void executeProgram(void) {
     while (vm->pc < vm->programLength) {
-        switch (vm->program[vm->pc].type) {
+        InstType opcode = vm->program[vm->pc].type;
+        Box operand = vm->program[vm->pc].operand;
+
+        switch (opcode) {
         case INST_STACK_PUSH:
-            STACK_PUSH(vm->program[vm->pc].operand);
+            STACK_PUSH(operand);
             break;
         case INST_ADD: {
             STACK_POP(Box roperand);
             STACK_POP(Box loperand);
 
-            if (type(loperand) == VAL_INT && type(roperand) == VAL_INT) {
+            if (TYPE(loperand) == VAL_INT && TYPE(roperand) == VAL_INT) {
                 int lv = loperand.int32;
                 int rv = roperand.int32;
                 int result = lv + rv;
@@ -54,9 +54,9 @@ void executeProgram(void) {
                 double lv = loperand.float64;
                 double rv = roperand.float64;
 
-                if (type(loperand) == VAL_INT) {
+                if (TYPE(loperand) == VAL_INT) {
                     lv = (double)loperand.int32;
-                } else if (type(roperand) == VAL_INT) {
+                } else if (TYPE(roperand) == VAL_INT) {
                     rv = (double)roperand.int32;
                 }
 
@@ -69,7 +69,7 @@ void executeProgram(void) {
             STACK_POP(Box roperand);
             STACK_POP(Box loperand);
 
-            if (type(loperand) == VAL_INT && type(roperand) == VAL_INT) {
+            if (TYPE(loperand) == VAL_INT && TYPE(roperand) == VAL_INT) {
                 int lv = loperand.int32;
                 int rv = roperand.int32;
                 int result = lv - rv;
@@ -84,9 +84,9 @@ void executeProgram(void) {
                 double lv = loperand.float64;
                 double rv = roperand.float64;
 
-                if (type(loperand) == VAL_INT) {
+                if (TYPE(loperand) == VAL_INT) {
                     lv = (double)loperand.int32;
-                } else if (type(roperand) == VAL_INT) {
+                } else if (TYPE(roperand) == VAL_INT) {
                     rv = (double)roperand.int32;
                 }
 
@@ -99,7 +99,7 @@ void executeProgram(void) {
             STACK_POP(Box roperand);
             STACK_POP(Box loperand);
 
-            if (type(loperand) == VAL_INT && type(roperand) == VAL_INT) {
+            if (TYPE(loperand) == VAL_INT && TYPE(roperand) == VAL_INT) {
                 int lv = loperand.int32;
                 int rv = roperand.int32;
                 int result = lv * rv;
@@ -114,9 +114,9 @@ void executeProgram(void) {
                 double lv = loperand.float64;
                 double rv = roperand.float64;
 
-                if (type(loperand) == VAL_INT) {
+                if (TYPE(loperand) == VAL_INT) {
                     lv = (double)loperand.int32;
-                } else if (type(roperand) == VAL_INT) {
+                } else if (TYPE(roperand) == VAL_INT) {
                     rv = (double)roperand.int32;
                 }
 
@@ -129,16 +129,16 @@ void executeProgram(void) {
             STACK_POP(Box roperand);
             STACK_POP(Box loperand);
 
-            if (type(loperand) == VAL_INT && type(roperand) == VAL_INT) {
+            if (TYPE(loperand) == VAL_INT && TYPE(roperand) == VAL_INT) {
                 int result = loperand.int32 / roperand.int32;
                 STACK_PUSH(createBox(&result, VAL_INT));
             } else {
                 double lv = loperand.float64;
                 double rv = roperand.float64;
 
-                if (type(loperand) == VAL_INT) {
+                if (TYPE(loperand) == VAL_INT) {
                     lv = (double)loperand.int32;
-                } else if (type(roperand) == VAL_INT) {
+                } else if (TYPE(roperand) == VAL_INT) {
                     rv = (double)roperand.int32;
                 }
 
@@ -151,7 +151,7 @@ void executeProgram(void) {
             int result;
 
             STACK_POP(Box value);
-            switch (type(value)) {
+            switch (TYPE(value)) {
             case VAL_INT: {
                 result = !value.int32;
                 break;
@@ -170,8 +170,8 @@ void executeProgram(void) {
             STACK_POP(Box roperand);
             STACK_POP(Box loperand);
 
-            if (type(roperand) == VAL_INT && type(loperand) == VAL_INT) {
-                    switch(vm->program[vm->pc].operand.int32) {
+            if (TYPE(roperand) == VAL_INT && TYPE(loperand) == VAL_INT) {
+                    switch(operand.int32) {
                     case CMP_EQ:
                         result = loperand.int32 == roperand.int32;
                         break;
@@ -195,13 +195,13 @@ void executeProgram(void) {
                 float lv = loperand.float64;
                 float rv = roperand.float64;
 
-                if (type(loperand) == VAL_INT) {
+                if (TYPE(loperand) == VAL_INT) {
                     lv = (double)loperand.int32;
-                } else if (type(roperand) == VAL_INT) {
+                } else if (TYPE(roperand) == VAL_INT) {
                     rv = (double)roperand.int32;
                 }
 
-                switch(vm->program[vm->pc].operand.int32) {
+                switch(operand.int32) {
                 case CMP_EQ:
                     result = lv == rv;
                     break;
@@ -231,7 +231,7 @@ void executeProgram(void) {
             CALLSTACK_PUSH(createBox(&nextInstruction, VAL_INT));
             CALLSTACK_PUSH(createBox(&vm->sp, VAL_INT));
 
-            vm->pc = vm->program[vm->pc].operand.int32;
+            vm->pc = operand.int32;
             continue;
         }
         case INST_RET: {
@@ -250,14 +250,14 @@ void executeProgram(void) {
             continue;
         }
         case INST_JMP:
-            vm->pc += vm->program[vm->pc].operand.int32;
+            vm->pc += operand.int32;
             continue;
         case INST_PUSH_ARG:
             vm->csp += 1;
             STACK_POP(vm->callStack[vm->csp]);
             break;
         case INST_FETCH_ARG: {
-            int index = vm->program[vm->pc].operand.int32;
+            int index = operand.int32;
             int basept = vm->csp - 2 - vm->callStack[vm->csp - 2].int32;
             STACK_PUSH(vm->callStack[basept + index]);
             break;
@@ -267,7 +267,7 @@ void executeProgram(void) {
 
             int shouldJump = !value.int32;
             if (shouldJump || vm->conditionBreaker) {
-                vm->pc += vm->program[vm->pc].operand.int32;
+                vm->pc += operand.int32;
                 continue;
             };
             break;
@@ -279,15 +279,21 @@ void executeProgram(void) {
             vm->conditionBreaker = 0;
             break;
         case INST_STACK_SWEEP:
-            vm->sp -= vm->program[vm->pc].operand.int32;
+            for (int i = 0; i < operand.int32; i++) {
+                Box box = vm->operandStack[vm->sp];
+                if (TYPE(box) == VAL_STRING) {
+                    free((char *)box.obj);
+                };
+                vm->sp -= 1;
+            }
             break;
         case INST_FETCH_VAR: {
-            Box value = vm->operandStack[vm->program[vm->pc].operand.int32];
-            STACK_PUSH(createBox(&value, type(value)));
+            Box value = vm->operandStack[operand.int32];
+            STACK_PUSH(value);
             break;
         }
         case INST_ASSIGN_VAR: {
-            STACK_POP(vm->operandStack[vm->program[vm->pc].operand.int32]);
+            STACK_POP(vm->operandStack[operand.int32]);
             break;
         }
         }
@@ -328,12 +334,15 @@ char* stringifyInst(InstType type) {
 }
 
 void printBox(Box box) {
-    switch (type(box)) {
+    switch (TYPE(box)) {
     case VAL_INT:
         printf("%d", box.int32);
         break;
     case VAL_FLOAT:
         printf("%f", box.float64);
+        break;
+    case VAL_STRING:
+        printf("%s", (char *)box.obj);
         break;
     default:
         break;
