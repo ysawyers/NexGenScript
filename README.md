@@ -1,7 +1,3 @@
-# TODO
-
-- scoped variables
-
 # Future Test Cases
 
 Conditional Breaking:
@@ -39,4 +35,14 @@ fun fib(n) {
 }
 
 fib(30);
+```
+
+GC:
+
+```
+let a = "hello";
+
+if (1) {
+    let b = a;
+}
 ```
